@@ -617,14 +617,27 @@ def render_asin_engine(final_df):
     )
 
     gb.configure_default_column(
-        sortable=True,
-        filter=True,
-        resizable=True,
-        floatingFilter=True,
-        wrapText=True,
-        autoHeight=True,
-        flex=1,
+    sortable=True,
+    filter=True,
+    resizable=True,
+    floatingFilter=True,
+    wrapText=False,
+    autoHeight=False,
     )
+    
+    # auto fit columns
+    gb.configure_grid_options(
+        domLayout='normal',
+    )
+    
+    # responsive width
+    for col in filtered_df.columns:
+
+        gb.configure_column(
+            col,
+            flex=1,
+            minWidth=120,
+        )
 
     # =====================================================
     # FREEZE COLUMNS
@@ -677,8 +690,14 @@ def render_asin_engine(final_df):
         gb.configure_column(
             "Image",
             cellRenderer=image_renderer,
-            width=90,
-            autoHeight=True
+            width=110,
+            minWidth=110,
+            maxWidth=110,
+            autoHeight=True,
+        )
+        
+        gb.configure_grid_options(
+            rowHeight=90
         )
 
     if "ASIN" in filtered_df.columns:
