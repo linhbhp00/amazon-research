@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 
 from urllib.parse import quote_plus
 
@@ -34,7 +33,6 @@ CREATION_DATE_COLUMNS = [
     "Date Created",
 ]
 
-
 # =========================================================
 # VALID HEADER
 # =========================================================
@@ -63,7 +61,6 @@ def auto_fix_asin_headers(df):
         return df
 
     # ==========================================
-    # CASE 1
     # HEADER ALREADY CORRECT
     # ==========================================
 
@@ -71,8 +68,7 @@ def auto_fix_asin_headers(df):
         return df
 
     # ==========================================
-    # CASE 2
-    # HEADER IN FIRST ROW
+    # FIRST ROW HEADER
     # ==========================================
 
     first_row = (
@@ -93,8 +89,7 @@ def auto_fix_asin_headers(df):
         return fixed_df
 
     # ==========================================
-    # CASE 3
-    # HEADER IN SECOND ROW
+    # SECOND ROW HEADER
     # ==========================================
 
     if len(df) > 1:
@@ -120,30 +115,6 @@ def auto_fix_asin_headers(df):
 
 
 # =========================================================
-# AMAZON SEARCH LINK
-# =========================================================
-
-def make_search_link(text):
-
-    if pd.isna(text):
-        return text
-
-    text = str(text)
-
-    return f"""
-    <a href="https://www.amazon.com/s?k={quote_plus(text)}"
-    target="_blank"
-    style="
-        color:#60a5fa;
-        text-decoration:none;
-        font-weight:500;
-    ">
-    {text}
-    </a>
-    """
-
-
-# =========================================================
 # ASIN LINK
 # =========================================================
 
@@ -160,7 +131,7 @@ def make_asin_link(asin):
     style="
         color:#60a5fa;
         text-decoration:none;
-        font-weight:600;
+        font-weight:700;
     ">
     {asin}
     </a>
@@ -168,7 +139,31 @@ def make_asin_link(asin):
 
 
 # =========================================================
-# URL BACKLINK
+# SEARCH LINK
+# =========================================================
+
+def make_search_link(text):
+
+    if pd.isna(text):
+        return text
+
+    text = str(text)
+
+    return f"""
+    <a href="https://www.amazon.com/s?k={quote_plus(text)}"
+    target="_blank"
+    style="
+        color:#60a5fa;
+        text-decoration:none;
+        font-weight:600;
+    ">
+    {text}
+    </a>
+    """
+
+
+# =========================================================
+# URL LINK
 # =========================================================
 
 def make_url_link(url):
@@ -184,7 +179,7 @@ def make_url_link(url):
     style="
         color:#60a5fa;
         text-decoration:none;
-        font-weight:500;
+        font-weight:600;
     ">
     Open URL
     </a>
@@ -192,7 +187,7 @@ def make_url_link(url):
 
 
 # =========================================================
-# SELLER GROUP
+# SELLER AGE
 # =========================================================
 
 def classify_seller_age(months):
@@ -210,7 +205,7 @@ def classify_seller_age(months):
 
 
 # =========================================================
-# LISTING GROUP
+# LISTING AGE
 # =========================================================
 
 def classify_listing_age(months):
@@ -243,7 +238,7 @@ def build_competitor_group(row):
 
 
 # =========================================================
-# STRATEGY ENGINE
+# STRATEGY
 # =========================================================
 
 def build_strategy(group):
@@ -251,24 +246,54 @@ def build_strategy(group):
     strategies = {
 
         "Old Seller + Old Listing":
-        "Strong moat competitor. Avoid direct competition and focus on underserved sub-niches.",
+        "Strong moat competitor. Avoid direct competition.",
 
         "Old Seller + New Listing":
-        "Large seller testing new market opportunities. Monitor growth velocity closely.",
+        "Large seller testing niche. Monitor closely.",
 
         "Mid Seller + Mid Listing":
-        "Stable sellers surviving in market. Study pricing and keyword structure.",
+        "Stable seller. Learn and follow patterns.",
 
         "New Seller + New Listing":
-        "Potential fast-moving trend opportunity. Watch acceleration carefully.",
+        "Trend opportunity. Watch acceleration.",
 
         "New Seller + Mid Listing":
-        "Weak demand or poor execution. Usually avoid unless market signals improve.",
+        "Weak demand. Low priority.",
     }
 
     return strategies.get(
         group,
-        "Research competitor behavior further."
+        "Further research required."
+    )
+
+
+# =========================================================
+# ACTION
+# =========================================================
+
+def build_action(group):
+
+    actions = {
+
+        "Old Seller + Old Listing":
+        "Avoid",
+
+        "Old Seller + New Listing":
+        "Monitor",
+
+        "Mid Seller + Mid Listing":
+        "Learn",
+
+        "New Seller + New Listing":
+        "Scale",
+
+        "New Seller + Mid Listing":
+        "Ignore",
+    }
+
+    return actions.get(
+        group,
+        "Research"
     )
 
 
@@ -293,7 +318,7 @@ def render_asin_engine(final_df):
         return
 
     # =====================================================
-    # HEADER FIX
+    # FIX HEADER
     # =====================================================
 
     final_df = auto_fix_asin_headers(
@@ -310,7 +335,7 @@ def render_asin_engine(final_df):
     ]
 
     # =====================================================
-    # CREATION DATE ENGINE
+    # CREATION DATE
     # =====================================================
 
     creation_col = None
@@ -344,12 +369,16 @@ def render_asin_engine(final_df):
             .astype(int)
         )
 
+        final_df["Seller Age Months"] = (
+            final_df["Listing Age Months"]
+        )
+
         # ==========================================
         # GROUPS
         # ==========================================
 
         final_df["Seller Group"] = (
-            final_df["Listing Age Months"]
+            final_df["Seller Age Months"]
             .apply(classify_seller_age)
         )
 
@@ -370,13 +399,18 @@ def render_asin_engine(final_df):
             .apply(build_strategy)
         )
 
+        final_df["Action"] = (
+            final_df["Competitor Group"]
+            .apply(build_action)
+        )
+
     # =====================================================
     # SEARCH
     # =====================================================
 
     search_value = st.text_input(
         "Quick Search",
-        placeholder="Search ASIN, brand, keyword..."
+        placeholder="Search ASIN, title, keyword..."
     )
 
     filtered_df = final_df.copy()
@@ -397,7 +431,7 @@ def render_asin_engine(final_df):
         ]
 
     # =====================================================
-    # DISPLAY DATAFRAME
+    # DISPLAY DF
     # =====================================================
 
     display_df = filtered_df.copy()
@@ -430,7 +464,7 @@ def render_asin_engine(final_df):
             )
 
     # =====================================================
-    # TITLE / BRAND LINKS
+    # SEARCH LINKS
     # =====================================================
 
     for col in display_df.columns:
@@ -454,7 +488,10 @@ def render_asin_engine(final_df):
 
     for col in display_df.columns:
 
-        if "url" in col.lower():
+        if (
+            "url" in col.lower()
+            and col not in IMAGE_COLUMNS
+        ):
 
             display_df[col] = (
                 display_df[col]
@@ -518,6 +555,7 @@ def render_asin_engine(final_df):
 
     cell_renderer = JsCode("""
     class UrlCellRenderer {
+
       init(params) {
         this.eGui = document.createElement('div');
         this.eGui.innerHTML = params.value || '';
@@ -538,14 +576,21 @@ def render_asin_engine(final_df):
 
       init(params) {
 
-        this.eGui = document.createElement('img');
+        this.eGui = document.createElement('div');
 
-        this.eGui.src = params.value;
-
-        this.eGui.style.width = '70px';
-        this.eGui.style.height = '70px';
-        this.eGui.style.objectFit = 'contain';
-        this.eGui.style.borderRadius = '8px';
+        this.eGui.innerHTML = `
+          <img
+            src="${params.value}"
+            style="
+              width:80px;
+              height:80px;
+              object-fit:contain;
+              border-radius:10px;
+              background:white;
+              padding:4px;
+            "
+          />
+        `;
       }
 
       getGui() {
@@ -555,7 +600,7 @@ def render_asin_engine(final_df):
     """)
 
     # =====================================================
-    # AGE COLOR
+    # AGE STYLE
     # =====================================================
 
     age_cell_style = JsCode("""
@@ -563,24 +608,75 @@ def render_asin_engine(final_df):
 
         if (params.value <= 6) {
             return {
-                'backgroundColor': '#052e16',
-                'color': '#86efac',
-                'fontWeight': '600'
+                'backgroundColor': '#dcfce7',
+                'color': '#166534',
+                'fontWeight': '700'
             }
         }
 
         else if (params.value <= 24) {
             return {
-                'backgroundColor': '#3b0764',
-                'color': '#d8b4fe',
-                'fontWeight': '600'
+                'backgroundColor': '#dbeafe',
+                'color': '#1d4ed8',
+                'fontWeight': '700'
             }
         }
 
         return {
-            'backgroundColor': '#450a0a',
-            'color': '#fca5a5',
-            'fontWeight': '600'
+            'backgroundColor': '#fee2e2',
+            'color': '#b91c1c',
+            'fontWeight': '700'
+        }
+    }
+    """)
+
+    # =====================================================
+    # ACTION STYLE
+    # =====================================================
+
+    action_cell_style = JsCode("""
+    function(params) {
+
+        if (!params.value) {
+            return {}
+        }
+
+        if (params.value.includes('Avoid')) {
+            return {
+                'backgroundColor': '#fee2e2',
+                'color': '#b91c1c',
+                'fontWeight': '700'
+            }
+        }
+
+        if (params.value.includes('Monitor')) {
+            return {
+                'backgroundColor': '#fef3c7',
+                'color': '#92400e',
+                'fontWeight': '700'
+            }
+        }
+
+        if (params.value.includes('Learn')) {
+            return {
+                'backgroundColor': '#dbeafe',
+                'color': '#1d4ed8',
+                'fontWeight': '700'
+            }
+        }
+
+        if (params.value.includes('Scale')) {
+            return {
+                'backgroundColor': '#dcfce7',
+                'color': '#166534',
+                'fontWeight': '700'
+            }
+        }
+
+        return {
+            'backgroundColor': '#f3f4f6',
+            'color': '#374151',
+            'fontWeight': '700'
         }
     }
     """)
@@ -594,7 +690,7 @@ def render_asin_engine(final_df):
         col_lower = col.lower()
 
         # ==========================================
-        # IMAGE COLUMN
+        # IMAGE
         # ==========================================
 
         if col in IMAGE_COLUMNS:
@@ -603,12 +699,12 @@ def render_asin_engine(final_df):
                 col,
                 header_name="Image",
                 cellRenderer=image_renderer,
-                width=90,
+                width=120,
                 pinned="left",
             )
 
         # ==========================================
-        # URL / ASIN / TITLE
+        # LINKS
         # ==========================================
 
         if (
@@ -625,7 +721,7 @@ def render_asin_engine(final_df):
             )
 
         # ==========================================
-        # PIN ASIN
+        # FREEZE ASIN
         # ==========================================
 
         if "asin" in col_lower:
@@ -637,14 +733,29 @@ def render_asin_engine(final_df):
             )
 
         # ==========================================
-        # LISTING AGE COLOR
+        # AGE COLOR
         # ==========================================
 
-        if col == "Listing Age Months":
+        if (
+            col == "Listing Age Months"
+            or col == "Seller Age Months"
+        ):
 
             gb.configure_column(
                 col,
                 cellStyle=age_cell_style
+            )
+
+        # ==========================================
+        # ACTION COLOR
+        # ==========================================
+
+        if col == "Action":
+
+            gb.configure_column(
+                col,
+                cellStyle=action_cell_style,
+                width=180
             )
 
     # =====================================================
@@ -653,13 +764,9 @@ def render_asin_engine(final_df):
 
     grid_options = gb.build()
 
-    grid_options["domLayout"] = "normal"
-
     grid_options["pagination"] = True
 
     grid_options["paginationPageSize"] = 100
-
-    grid_options["suppressColumnVirtualisation"] = True
 
     grid_options["autoSizeStrategy"] = {
         "type": "fitCellContents"
@@ -704,13 +811,63 @@ def render_asin_engine(final_df):
             "Count"
         ]
 
+        # =================================================
+        # BAR CHART
+        # =================================================
+
+        st.markdown(
+            "### Competitor Distribution"
+        )
+
+        chart_df = competitor_summary.set_index(
+            "Group"
+        )
+
+        st.bar_chart(
+            chart_df["Count"]
+        )
+
+        # =================================================
+        # AREA CHART
+        # =================================================
+
+        st.markdown(
+            "### Market Opportunity Trend"
+        )
+
+        st.area_chart(
+            chart_df["Count"]
+        )
+
+        # =================================================
+        # LINE CHART
+        # =================================================
+
+        st.markdown(
+            "### Competitor Growth Signals"
+        )
+
+        st.line_chart(
+            chart_df["Count"]
+        )
+
+        # =================================================
+        # INSIGHT CARDS
+        # =================================================
+
         for _, row in competitor_summary.iterrows():
 
             group_name = row["Group"]
 
             count = row["Count"]
 
-            strategy = build_strategy(group_name)
+            strategy = build_strategy(
+                group_name
+            )
+
+            action = build_action(
+                group_name
+            )
 
             st.markdown(
                 f"""
@@ -743,8 +900,21 @@ def render_asin_engine(final_df):
                     font-size:14px;
                     color:#cbd5e1;
                     line-height:1.6;
+                    margin-bottom:12px;
                 ">
                     {strategy}
+                </div>
+
+                <div style="
+                    display:inline-block;
+                    padding:8px 12px;
+                    border-radius:8px;
+                    background:#1e293b;
+                    color:#f8fafc;
+                    font-size:13px;
+                    font-weight:700;
+                ">
+                    {action}
                 </div>
 
                 </div>
