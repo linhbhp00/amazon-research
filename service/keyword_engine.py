@@ -48,16 +48,18 @@ def auto_fix_keyword_headers(df):
     if df is None or df.empty:
         return df
 
-    # =====================================================
+    # ==========================================
+    # CASE 1
     # HEADER ALREADY CORRECT
-    # =====================================================
+    # ==========================================
 
     if is_valid_keyword_header(df.columns):
         return df
 
-    # =====================================================
-    # FIRST ROW
-    # =====================================================
+    # ==========================================
+    # CASE 2
+    # HEADER IN FIRST ROW
+    # ==========================================
 
     first_row = (
         df.iloc[0]
@@ -76,9 +78,10 @@ def auto_fix_keyword_headers(df):
 
         return fixed_df
 
-    # =====================================================
-    # SECOND ROW
-    # =====================================================
+    # ==========================================
+    # CASE 3
+    # HEADER IN SECOND ROW
+    # ==========================================
 
     if len(df) > 1:
 
@@ -98,65 +101,6 @@ def auto_fix_keyword_headers(df):
             fixed_df = fixed_df.iloc[2:].reset_index(drop=True)
 
             return fixed_df
-
-    return df
-
-
-# =========================================================
-# NORMALIZE SEARCH TERM
-# =========================================================
-
-def normalize_search_term(x):
-
-    if pd.isna(x):
-        return ""
-
-    x = str(x)
-
-    x = x.replace("[", "")
-    x = x.replace("]", "")
-    x = x.replace('"', "")
-    x = x.replace("'", "")
-
-    return x.strip().lower()
-
-
-# =========================================================
-# ASSIGN NICHE
-# =========================================================
-
-def assign_niche(df):
-
-    if "Search Term" not in df.columns:
-        return df
-
-    df = df.copy()
-
-    unique_terms = (
-        df["Search Term"]
-        .dropna()
-        .astype(str)
-        .unique()
-    )
-
-    if len(unique_terms) == 1:
-
-        niche_value = unique_terms[0]
-
-        df["Niche"] = niche_value
-
-    else:
-
-        df["Niche"] = (
-            df["Search Term"]
-            .astype(str)
-            .apply(
-                lambda x:
-                x.split(" ")[0]
-                if x.strip()
-                else "unknown"
-            )
-        )
 
     return df
 
@@ -190,18 +134,17 @@ def clean_text(text):
 def make_search_link(text):
 
     if pd.isna(text):
+        return text
 
-        return {
-            "text": "",
-            "url": "#"
-        }
+    original_text = str(text)
 
-    text = str(text)
-
-    return {
-        "text": text,
-        "url": f"https://www.amazon.com/s?k={quote_plus(text)}"
-    }
+    return f"""
+    <a href="https://www.amazon.com/s?k={quote_plus(original_text)}"
+    target="_blank"
+    style="color:#60a5fa;text-decoration:none;font-weight:500;">
+    {original_text}
+    </a>
+    """
 
 
 # =========================================================
@@ -211,18 +154,17 @@ def make_search_link(text):
 def make_asin_link(asin):
 
     if pd.isna(asin):
-
-        return {
-            "text": "",
-            "url": "#"
-        }
+        return asin
 
     asin = str(asin)
 
-    return {
-        "text": asin,
-        "url": f"https://www.amazon.com/dp/{asin}"
-    }
+    return f"""
+    <a href="https://www.amazon.com/dp/{asin}"
+    target="_blank"
+    style="color:#60a5fa;text-decoration:none;font-weight:500;">
+    {asin}
+    </a>
+    """
 
 
 # =========================================================
@@ -239,18 +181,10 @@ def extract_ngrams(
 
     try:
 
-        dynamic_min_df = max(
-            1,
-            min(
-                min_freq,
-                int(len(corpus) * 0.01)
-            )
-        )
-
         vectorizer = CountVectorizer(
             ngram_range=ngram_range,
             stop_words="english",
-            min_df=dynamic_min_df
+            min_df=min_freq
         )
 
         X = vectorizer.fit_transform(corpus)
@@ -285,253 +219,148 @@ def extract_ngrams(
 
 
 # =========================================================
-# CLUSTER ENGINE
+# SMART NICHE FILTER
 # =========================================================
 
-def generate_cluster_insights(trigram_df):
+def build_smart_niche_options(single_word_df):
 
-    cluster_definitions = {
+    if single_word_df.empty:
+        return []
 
-        "Pet Memorial": {
-            "keywords": [
-                "dog",
-                "cat",
-                "pet",
-                "rainbow bridge",
-            ],
-            "emotion": "Pet Grief",
-            "products": "Plaques, Frames, Wind Chimes",
-        },
+    blacklist = {
 
-        "Family Loss": {
-            "keywords": [
-                "dad",
-                "mom",
-                "father",
-                "mother",
-                "loss",
-            ],
-            "emotion": "Grief/Nostalgia",
-            "products": "Lanterns, Blankets, Jewelry",
-        },
-
-        "Outdoor Memorial Decor": {
-            "keywords": [
-                "garden",
-                "stone",
-                "wind chime",
-                "plaque",
-            ],
-            "emotion": "Remembrance",
-            "products": "Garden Decor, Solar Plaques",
-        },
-
-        "Funeral Service": {
-            "keywords": [
-                "funeral",
-                "guest book",
-                "cards",
-            ],
-            "emotion": "Sympathy",
-            "products": "Guest Books, Signs",
-        },
-
-        "Personalized Memorial": {
-            "keywords": [
-                "personalized",
-                "custom",
-                "engraved",
-            ],
-            "emotion": "Memory",
-            "products": "Custom Acrylic, Plaques",
-        },
+        "gift",
+        "gifts",
+        "best",
+        "new",
+        "home",
+        "decor",
+        "set",
+        "custom",
+        "personalized",
+        "amazon",
+        "product",
+        "products",
+        "for",
+        "and",
+        "the",
+        "with",
     }
+
+    niche_words = []
+
+    for _, row in single_word_df.iterrows():
+
+        word = str(row["Phrase"]).lower()
+
+        freq = int(row["Frequency"])
+
+        if word in blacklist:
+            continue
+
+        if freq < 2:
+            continue
+
+        if len(word) <= 2:
+            continue
+
+        niche_words.append(word)
+
+    return sorted(list(set(niche_words)))
+
+
+# =========================================================
+# MARKET INSIGHTS ENGINE
+# =========================================================
+
+def generate_market_insights(trigram_df):
 
     rows = []
 
-    for _, config in cluster_definitions.items():
+    for _, row in trigram_df.iterrows():
 
-        total_freq = 0
+        phrase = str(row["Phrase"])
 
-        matched_phrases = []
+        freq = int(row["Frequency"])
 
-        for _, row in trigram_df.iterrows():
+        # =====================================
+        # COMPETITION
+        # =====================================
 
-            phrase = str(
-                row["Phrase"]
-            ).lower()
+        if freq >= 15:
+            competition = "High"
 
-            for keyword in config["keywords"]:
+        elif freq >= 7:
+            competition = "Medium"
 
-                if keyword in phrase:
+        else:
+            competition = "Low"
 
-                    total_freq += int(
-                        row["Frequency"]
-                    )
+        # =====================================
+        # SCORE
+        # =====================================
 
-                    matched_phrases.append(
-                        row["Phrase"]
-                    )
+        opportunity_score = min(
+            100,
+            int(freq * 8)
+        )
 
-        if total_freq > 0:
+        # =====================================
+        # DEMAND
+        # =====================================
 
-            if total_freq >= 15:
-                competition = "High"
+        if opportunity_score >= 85:
 
-            elif total_freq >= 7:
-                competition = "Medium"
+            demand = "Strong Market Demand"
 
-            else:
-                competition = "Low"
-
-            opportunity_score = min(
-                100,
-                int(total_freq * 8)
+            growth = (
+                "Scale aggressively with bundles, variants, and personalization."
             )
 
-            confidence = (
-                "High Confidence"
-                if total_freq >= 20
-                else "Medium Confidence"
-                if total_freq >= 8
-                else "Low Confidence"
+            action = (
+                "Launch expanded product line and dominate search volume."
             )
 
-            if opportunity_score >= 90:
+        elif opportunity_score >= 65:
 
-                action = "Launch Aggressively"
+            demand = "Growing Demand"
 
-            elif opportunity_score >= 75:
-
-                action = "Scale Existing Products"
-
-            elif opportunity_score >= 60:
-
-                action = "Validate Market"
-
-            else:
-
-                action = "Research Further"
-
-            rows.append({
-
-                "Main Signals": ", ".join(
-                    list(set(matched_phrases))[:5]
-                ),
-
-                "Emotion": config["emotion"],
-
-                "Product Opportunities":
-                config["products"],
-
-                "Competition": competition,
-
-                "Opportunity Score":
-                opportunity_score,
-
-                "Recommended Action":
-                action,
-
-                "Confidence":
-                confidence
-            })
-
-    return pd.DataFrame(rows)
-
-
-# =========================================================
-# MARKET RECOMMENDATIONS
-# =========================================================
-
-def generate_market_recommendations(cluster_df):
-
-    recommendations = []
-
-    if cluster_df.empty:
-        return recommendations
-
-    for _, row in cluster_df.iterrows():
-
-        score = row["Opportunity Score"]
-
-        emotion = row["Emotion"]
-
-        signals = row["Main Signals"]
-
-        products = row["Product Opportunities"]
-
-        competition = row["Competition"]
-
-        confidence = row["Confidence"]
-
-        # =================================================
-        # HIGH DEMAND
-        # =================================================
-
-        if score >= 85:
-
-            title = "High Demand Expansion"
-
-            detail = (
-                f"Strong demand detected around "
-                f"{signals}. "
-                f"Recommended products: {products}."
+            growth = (
+                "Expand keyword coverage and test adjacent products."
             )
 
-            next_step = (
-                "Scale product line and validate"
-                " winning ASIN opportunities."
+            action = (
+                "Validate profitable ASIN opportunities."
             )
-
-        # =================================================
-        # MID DEMAND
-        # =================================================
-
-        elif score >= 60:
-
-            title = "Growth Opportunity"
-
-            detail = (
-                f"Moderate growth potential in "
-                f"{emotion.lower()} niche."
-            )
-
-            next_step = (
-                "Test low competition keyword variations"
-                " and personalized bundles."
-            )
-
-        # =================================================
-        # LOW DEMAND
-        # =================================================
 
         else:
 
-            title = "Emerging Demand"
+            demand = "Emerging Opportunity"
 
-            detail = (
-                f"Early signals detected for "
-                f"{signals}."
+            growth = (
+                "Research niche depth and seasonal behavior."
             )
 
-            next_step = (
-                "Monitor trend growth before scaling."
+            action = (
+                "Test low-competition listings before scaling."
             )
 
-        recommendations.append({
+        rows.append({
 
-            "title": title,
+            "Main Signals": phrase,
 
-            "detail": detail,
+            "Emotion": demand,
 
-            "competition": competition,
+            "Product Opportunities": growth,
 
-            "next_step": next_step,
+            "Competition": competition,
 
-            "confidence": confidence
+            "Opportunity Score": opportunity_score,
+
+            "Action": action
         })
 
-    return recommendations
+    return pd.DataFrame(rows)
 
 
 # =========================================================
@@ -562,34 +391,14 @@ def render_keyword_engine(final_df):
         final_df
     )
 
-    # =====================================================
-    # REMOVE DUPLICATE COLUMNS
-    # =====================================================
-
+    # remove duplicate columns
     final_df = final_df.loc[
         :,
         ~final_df.columns.duplicated()
     ]
 
     # =====================================================
-    # SEARCH TERM NORMALIZE
-    # =====================================================
-
-    if "Search Term" in final_df.columns:
-
-        final_df["Search Term"] = (
-            final_df["Search Term"]
-            .apply(normalize_search_term)
-        )
-
-    # =====================================================
-    # NICHE FIX
-    # =====================================================
-
-    final_df = assign_niche(final_df)
-
-    # =====================================================
-    # DATE FIX
+    # DATE ENGINE
     # =====================================================
 
     if "Reporting Date" in final_df.columns:
@@ -601,11 +410,6 @@ def render_keyword_engine(final_df):
             )
         )
 
-        final_df["Year"] = (
-            final_df["Reporting Date"]
-            .dt.year
-        )
-
         final_df["Month"] = (
             final_df["Reporting Date"]
             .dt.month
@@ -615,290 +419,28 @@ def render_keyword_engine(final_df):
             final_df["Month"]
             .apply(
                 lambda x:
-                f"Q{((x - 1)//3)+1}"
+                f"Q{int(((int(x)-1)//3)+1)}"
                 if pd.notna(x)
                 else None
             )
         )
 
-    # =====================================================
-    # FILTERS
-    # =====================================================
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-
-        niche_filter = st.multiselect(
-            "Niche",
-            options=sorted(
-                final_df["Niche"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-            if "Niche" in final_df.columns
-            else []
-        )
-
-    with col2:
-
-        quarter_filter = st.multiselect(
-            "Quarter",
-            options=["Q1", "Q2", "Q3", "Q4"]
-        )
-
-    with col3:
-
-        year_filter = st.multiselect(
-            "Year",
-            options=sorted(
-                final_df["Year"]
-                .dropna()
-                .astype(str)
-                .unique()
-            )
-            if "Year" in final_df.columns
-            else []
-        )
-
-    # =====================================================
-    # FILTER DATA
-    # =====================================================
-
-    filtered_df = final_df.copy()
-
-    if niche_filter and "Niche" in filtered_df.columns:
-
-        filtered_df = filtered_df[
-            filtered_df["Niche"]
+        final_df["Year"] = (
+            final_df["Reporting Date"]
+            .dt.year
+            .fillna(0)
+            .astype(int)
             .astype(str)
-            .isin(niche_filter)
-        ]
+        )
 
-    if quarter_filter and "Quarter" in filtered_df.columns:
-
-        filtered_df = filtered_df[
-            filtered_df["Quarter"]
-            .astype(str)
-            .isin(quarter_filter)
-        ]
-
-    if year_filter and "Year" in filtered_df.columns:
-
-        filtered_df = filtered_df[
-            filtered_df["Year"]
-            .astype(str)
-            .isin(year_filter)
-        ]
-
-    # =====================================================
-    # SEARCH
-    # =====================================================
-
-    search_value = st.text_input(
-        "Quick Search",
-        placeholder="Search anything..."
-    )
-
-    if search_value:
-
-        filtered_df = filtered_df[
-            filtered_df.astype(str)
-            .apply(
-                lambda row:
-                row.str.contains(
-                    search_value,
-                    case=False,
-                    na=False
-                ).any(),
-                axis=1
-            )
-        ]
-
-    # =====================================================
-    # DISPLAY DATAFRAME
-    # =====================================================
-
-    display_df = filtered_df.copy()
-
-    # =====================================================
-    # SEARCH TERM LINKS
-    # =====================================================
-
-    if "Search Term" in display_df.columns:
-
-        display_df["Search Term"] = (
-            display_df["Search Term"]
-            .apply(make_search_link)
+        final_df["Year"] = (
+            final_df["Year"]
+            .replace("0", np.nan)
         )
 
     # =====================================================
-    # BRAND/CATEGORY LINKS
+    # NLP SOURCE
     # =====================================================
-
-    for col in display_df.columns:
-
-        col_lower = col.lower()
-
-        if (
-            "brand" in col_lower
-            or "category" in col_lower
-        ):
-
-            display_df[col] = (
-                display_df[col]
-                .apply(make_search_link)
-            )
-
-    # =====================================================
-    # ASIN LINKS
-    # =====================================================
-
-    for col in display_df.columns:
-
-        if "asin" in col.lower():
-
-            display_df[col] = (
-                display_df[col]
-                .apply(make_asin_link)
-            )
-
-    # =====================================================
-    # METRICS
-    # =====================================================
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric(
-        "Rows",
-        f"{len(filtered_df):,}"
-    )
-
-    c2.metric(
-        "Columns",
-        len(filtered_df.columns)
-    )
-
-    c3.metric(
-        "Unique Niches",
-        filtered_df["Niche"].nunique()
-        if "Niche" in filtered_df.columns
-        else 0
-    )
-
-    # =====================================================
-    # DATASET TABLE
-    # =====================================================
-
-    st.markdown("## Keyword Dataset")
-
-    gb = GridOptionsBuilder.from_dataframe(
-        display_df
-    )
-
-    gb.configure_default_column(
-        sortable=True,
-        filter=True,
-        resizable=True,
-        floatingFilter=True,
-    )
-
-    # =====================================================
-    # URL RENDERER
-    # =====================================================
-
-    cell_renderer = JsCode("""
-    class UrlCellRenderer {
-
-        init(params) {
-
-            this.eGui = document.createElement('a');
-
-            this.eGui.innerText = params.value?.text || '';
-
-            this.eGui.setAttribute(
-                'href',
-                params.value?.url || '#'
-            );
-
-            this.eGui.setAttribute(
-                'target',
-                '_blank'
-            );
-
-            this.eGui.style.color = '#60a5fa';
-
-            this.eGui.style.textDecoration = 'none';
-        }
-
-        getGui() {
-            return this.eGui;
-        }
-    }
-    """)
-
-    for col in display_df.columns:
-
-        col_lower = col.lower()
-
-        if (
-            "search term" in col_lower
-            or "brand" in col_lower
-            or "category" in col_lower
-            or "asin" in col_lower
-        ):
-
-            gb.configure_column(
-                col,
-                cellRenderer=cell_renderer
-            )
-
-    grid_options = gb.build()
-
-    # =====================================================
-    # AUTO FIT
-    # =====================================================
-
-    grid_options["onFirstDataRendered"] = JsCode("""
-    function(params) {
-
-        params.api.sizeColumnsToFit();
-
-        setTimeout(() => {
-
-            let allColumnIds = [];
-
-            params.columnApi.getAllColumns().forEach(function(col) {
-                allColumnIds.push(col.getId());
-            });
-
-            params.columnApi.autoSizeColumns(
-                allColumnIds,
-                false
-            );
-
-        }, 120);
-    }
-    """)
-
-    AgGrid(
-        display_df,
-        gridOptions=grid_options,
-        theme="alpine-dark",
-        height=720,
-        fit_columns_on_grid_load=True,
-        update_mode=GridUpdateMode.NO_UPDATE,
-        allow_unsafe_jscode=True,
-        reload_data=False,
-    )
-
-    # =====================================================
-    # NLP ENGINE
-    # =====================================================
-
-    st.markdown("---")
-    st.markdown("# NLP Market Intelligence")
 
     candidate_columns = [
         "Search Term",
@@ -913,7 +455,7 @@ def render_keyword_engine(final_df):
 
     for col in candidate_columns:
 
-        if col in filtered_df.columns:
+        if col in final_df.columns:
 
             nlp_source_column = col
 
@@ -961,7 +503,7 @@ def render_keyword_engine(final_df):
     # =====================================================
 
     nlp_series = (
-        filtered_df[nlp_source_column]
+        final_df[nlp_source_column]
         .astype(str)
         .apply(clean_text)
     )
@@ -993,27 +535,259 @@ def render_keyword_engine(final_df):
         top_n
     )
 
-    cluster_df = generate_cluster_insights(
+    # =====================================================
+    # MARKET INSIGHTS
+    # =====================================================
+
+    cluster_df = generate_market_insights(
         trigram_df
     )
 
     # =====================================================
-    # CONFIDENCE CHECK
+    # SMART NICHE OPTIONS
     # =====================================================
 
-    if cluster_df.empty:
-
-        st.warning(
-            "Dataset too small or weak for strategic insights."
+    smart_niche_options = (
+        build_smart_niche_options(
+            single_word_df
         )
+    )
+
+    # =====================================================
+    # FILTERS
+    # =====================================================
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+
+        niche_filter = st.multiselect(
+            "Niche Intelligence",
+            options=smart_niche_options
+        )
+
+    with col2:
+
+        quarter_filter = st.multiselect(
+            "Quarter",
+            options=sorted(
+                final_df["Quarter"]
+                .dropna()
+                .astype(str)
+                .unique()
+            )
+            if "Quarter" in final_df.columns
+            else []
+        )
+
+    with col3:
+
+        year_filter = st.multiselect(
+            "Year",
+            options=sorted(
+                final_df["Year"]
+                .dropna()
+                .astype(str)
+                .unique()
+            )
+            if "Year" in final_df.columns
+            else []
+        )
+
+    # =====================================================
+    # FILTER DATA
+    # =====================================================
+
+    filtered_df = final_df.copy()
+
+    if niche_filter:
+
+        pattern = "|".join(niche_filter)
+
+        filtered_df = filtered_df[
+            filtered_df["Search Term"]
+            .astype(str)
+            .str.contains(
+                pattern,
+                case=False,
+                na=False
+            )
+        ]
+
+    if quarter_filter and "Quarter" in filtered_df.columns:
+
+        filtered_df = filtered_df[
+            filtered_df["Quarter"]
+            .astype(str)
+            .isin(quarter_filter)
+        ]
+
+    if year_filter and "Year" in filtered_df.columns:
+
+        filtered_df = filtered_df[
+            filtered_df["Year"]
+            .astype(str)
+            .isin(year_filter)
+        ]
+
+    # =====================================================
+    # SEARCH
+    # =====================================================
+
+    search_value = st.text_input(
+        "Quick Search",
+        placeholder="Search anything..."
+    )
+
+    if search_value:
+
+        filtered_df = filtered_df[
+            filtered_df.astype(str)
+            .apply(
+                lambda row:
+                row.str.contains(
+                    search_value,
+                    case=False,
+                    na=False
+                ).any(),
+                axis=1
+            )
+        ]
+
+    # =====================================================
+    # AMAZON LINKS
+    # =====================================================
+
+    display_df = filtered_df.copy()
+
+    if "Search Term" in display_df.columns:
+
+        display_df["Search Term"] = (
+            display_df["Search Term"]
+            .apply(make_search_link)
+        )
+
+    for col in display_df.columns:
+
+        col_lower = col.lower()
+
+        if "brand" in col_lower:
+
+            display_df[col] = (
+                display_df[col]
+                .apply(make_search_link)
+            )
+
+        if "category" in col_lower:
+
+            display_df[col] = (
+                display_df[col]
+                .apply(make_search_link)
+            )
+
+    for col in display_df.columns:
+
+        if "asin" in col.lower():
+
+            display_df[col] = (
+                display_df[col]
+                .apply(make_asin_link)
+            )
 
     # =====================================================
     # METRICS
     # =====================================================
 
-    st.markdown(
-        "## Strategic Market Intelligence"
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "Rows",
+        f"{len(filtered_df):,}"
     )
+
+    c2.metric(
+        "Columns",
+        len(filtered_df.columns)
+    )
+
+    c3.metric(
+        "Market Signals",
+        len(smart_niche_options)
+    )
+
+    # =====================================================
+    # DATASET TABLE
+    # =====================================================
+
+    st.markdown("## Keyword Dataset")
+
+    gb = GridOptionsBuilder.from_dataframe(
+        display_df
+    )
+
+    gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        resizable=True,
+        floatingFilter=True,
+        wrapText=False,
+        autoHeight=False,
+    )
+
+    cell_renderer = JsCode("""
+    class UrlCellRenderer {
+      init(params) {
+        this.eGui = document.createElement('div');
+        this.eGui.innerHTML = params.value || '';
+      }
+
+      getGui() {
+        return this.eGui;
+      }
+    }
+    """)
+
+    for col in display_df.columns:
+
+        col_lower = col.lower()
+
+        if (
+            "search term" in col_lower
+            or "brand" in col_lower
+            or "category" in col_lower
+            or "asin" in col_lower
+        ):
+
+            gb.configure_column(
+                col,
+                cellRenderer=cell_renderer
+            )
+
+    grid_options = gb.build()
+
+    grid_options["domLayout"] = "normal"
+
+    AgGrid(
+        display_df,
+        gridOptions=grid_options,
+        theme="alpine-dark",
+        height=720,
+        columns_auto_size_mode="FIT_CONTENTS",
+        update_mode=GridUpdateMode.NO_UPDATE,
+        allow_unsafe_jscode=True,
+        reload_data=False,
+    )
+
+    # =====================================================
+    # NLP ENGINE
+    # =====================================================
+
+    st.markdown("---")
+    st.markdown("# NLP Market Intelligence")
+
+    # =====================================================
+    # METRICS
+    # =====================================================
 
     metric1, metric2, metric3, metric4 = (
         st.columns(4)
@@ -1035,7 +809,7 @@ def render_keyword_engine(final_df):
     )
 
     metric4.metric(
-        "Market Signals",
+        "Market Insights",
         len(cluster_df)
     )
 
@@ -1100,76 +874,82 @@ def render_keyword_engine(final_df):
             height=700
         )
 
-        # =================================================
-        # RECOMMENDATIONS
-        # =================================================
+        # =====================================================
+        # RESEARCH RECOMMENDATIONS
+        # =====================================================
 
-        st.markdown("## Research Recommendations")
-
-        recommendations = (
-            generate_market_recommendations(
-                cluster_df
-            )
+        st.markdown(
+            "## Research Recommendations"
         )
 
-        if not recommendations:
+        recommendations = [
 
-            st.info(
-                "No strong market opportunities detected yet."
+            {
+                "title": "High Demand Expansion",
+                "desc": (
+                    "Scale proven high-frequency keywords into adjacent products and bundles."
+                )
+            },
+
+            {
+                "title": "Low Competition Opportunities",
+                "desc": (
+                    "Target emerging long-tail phrases with lower seller saturation."
+                )
+            },
+
+            {
+                "title": "Personalization Strategy",
+                "desc": (
+                    "Test custom, engraved, and POD product variations to improve conversion."
+                )
+            },
+
+            {
+                "title": "ASIN Growth Potential",
+                "desc": (
+                    "Validate top-performing search intent with additional listing variations."
+                )
+            },
+
+            {
+                "title": "Seasonal Demand Intelligence",
+                "desc": (
+                    "Monitor quarter-based trends to identify scalable seasonal demand."
+                )
+            },
+        ]
+
+        for rec in recommendations:
+
+            st.markdown(
+                f"""
+                <div style="
+                    padding:18px;
+                    margin-bottom:12px;
+                    border-radius:14px;
+                    background:#0b1220;
+                    border:1px solid #1f2937;
+                ">
+
+                <div style="
+                    font-size:18px;
+                    font-weight:700;
+                    color:#f8fafc;
+                    margin-bottom:6px;
+                ">
+                    {rec['title']}
+                </div>
+
+                <div style="
+                    font-size:14px;
+                    color:#cbd5e1;
+                    line-height:1.6;
+                ">
+                    {rec['desc']}
+                </div>
+
+                </div>
+                """,
+                unsafe_allow_html=True
             )
-
-        for r in recommendations:
-
-            st.markdown(f"""
-            <div style="
-                padding:16px;
-                margin-bottom:12px;
-                border-radius:12px;
-                background:#0b1220;
-                border:1px solid #1f2937;
-            ">
-
-            <div style="
-                font-size:18px;
-                font-weight:700;
-                margin-bottom:8px;
-                color:#f8fafc;
-            ">
-            {r['title']}
-            </div>
-
-            <div style="
-                color:#cbd5e1;
-                margin-bottom:10px;
-                line-height:1.6;
-            ">
-            {r['detail']}
-            </div>
-
-            <div style="
-                margin-bottom:8px;
-                color:#93c5fd;
-                font-size:14px;
-            ">
-            Opportunity Level: {r['competition']}
-            </div>
-
-            <div style="
-                margin-bottom:8px;
-                color:#86efac;
-                font-size:14px;
-            ">
-            Recommended Next Step:
-            {r['next_step']}
-            </div>
-
-            <div style="
-                color:#facc15;
-                font-size:13px;
-            ">
-            Insight Confidence:
-            {r['confidence']}
-            </div>
-
-            </div>
-            """, unsafe_allow_html=True)
