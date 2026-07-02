@@ -1068,70 +1068,70 @@ def render_asin_engine(final_df):
         )
 
     # =========================================================
-# CATEGORY MARKET SHARE BY GROUP BEFORE SALES
-# =========================================================
-
-st.markdown("---")
-st.markdown("## Category Market Share Intelligence")
-
-possible_category_cols = [
-    "Category",
-    "Categories",
-    "Main Category",
-    "Product Category",
-]
-
-category_col = None
-
-for col in possible_category_cols:
-
-    if col in filtered_df.columns:
-
-        category_col = col
-        break
-
-# =====================================================
-# CATEGORY ANALYSIS
-# =====================================================
-
-if category_col:
-
-    available_groups = sorted(
-        filtered_df["Group Before Sales"]
-        .dropna()
-        .astype(str)
-        .unique()
-    )
-
-    selected_group = st.selectbox(
-        "Select Group Before Sales",
-        options=available_groups
-    )
-
-    group_df = filtered_df[
-        filtered_df["Group Before Sales"]
-        .astype(str)
-        == selected_group
-    ]
-
-    # =================================================
-    # CATEGORY SHARE
-    # =================================================
-
-    category_share_df = (
-        group_df[category_col]
-        .fillna("Unknown")
-        .astype(str)
-        .value_counts(normalize=True)
-        .mul(100)
-        .round(1)
-        .reset_index()
-    )
-
-    category_share_df.columns = [
+    # CATEGORY MARKET SHARE BY GROUP BEFORE SALES
+    # =========================================================
+    
+    st.markdown("---")
+    st.markdown("## Category Market Share Intelligence")
+    
+    possible_category_cols = [
         "Category",
-        "Market Share %"
+        "Categories",
+        "Main Category",
+        "Product Category",
     ]
+    
+    category_col = None
+    
+    for col in possible_category_cols:
+    
+        if col in filtered_df.columns:
+    
+            category_col = col
+            break
+    
+    # =====================================================
+    # CATEGORY ANALYSIS
+    # =====================================================
+    
+    if category_col:
+    
+        available_groups = sorted(
+            filtered_df["Group Before Sales"]
+            .dropna()
+            .astype(str)
+            .unique()
+        )
+    
+        selected_group = st.selectbox(
+            "Select Group Before Sales",
+            options=available_groups
+        )
+    
+        group_df = filtered_df[
+            filtered_df["Group Before Sales"]
+            .astype(str)
+            == selected_group
+        ]
+    
+        # =================================================
+        # CATEGORY SHARE
+        # =================================================
+    
+        category_share_df = (
+            group_df[category_col]
+            .fillna("Unknown")
+            .astype(str)
+            .value_counts(normalize=True)
+            .mul(100)
+            .round(1)
+            .reset_index()
+        )
+    
+        category_share_df.columns = [
+            "Category",
+            "Market Share %"
+        ]
 
     # =================================================
     # DATAFRAME
@@ -1221,7 +1221,7 @@ if category_col:
             unsafe_allow_html=True
         )
 
-else:
+    else:
 
     st.info(
         "No category column detected."
