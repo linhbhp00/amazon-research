@@ -1,3 +1,4 @@
+from utils.csv_utils import read_csv_safe
 import streamlit as st
 import pandas as pd
 import numpy as np
