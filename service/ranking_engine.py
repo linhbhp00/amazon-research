@@ -560,85 +560,6 @@ def render_ranking_engine(final_df):
     )
 
     # =====================================================
-    # INSIGHTS
-    # =====================================================
-
-    st.markdown(
-        "## Keyword Opportunity Intelligence"
-    )
-
-    insight_df = (
-        filtered_df
-        .groupby(
-            [
-                "Keyword Classification",
-                "Product Type",
-            ]
-        )
-        .agg({
-
-            "Keyword Phrase": "count",
-            "Opportunity Score": "mean",
-            "Search Volume": "mean",
-            "H10 PPC Sugg. Bid": "mean",
-
-        })
-        .reset_index()
-    )
-
-    insight_df.columns = [
-
-        "Classification",
-        "Product Type",
-        "Keyword Count",
-        "Avg Opportunity Score",
-        "Avg Search Volume",
-        "Avg CPC",
-
-    ]
-
-    st.dataframe(
-        insight_df,
-        use_container_width=True,
-        height=320
-    )
-
-    # =====================================================
-    # TOP KEYWORDS
-    # =====================================================
-
-    st.markdown(
-        "## Top Opportunity Keywords"
-    )
-
-    top_keywords = (
-        filtered_df
-        .sort_values(
-            by="Opportunity Score",
-            ascending=False
-        )
-        .head(50)
-    )
-
-    st.dataframe(
-        top_keywords[
-            [
-                "Keyword Phrase",
-                "Keyword Classification",
-                "Product Type",
-                "Search Volume",
-                "Cerebro IQ Score",
-                "H10 PPC Sugg. Bid",
-                "Competing Products",
-                "Opportunity Score",
-                "Action",
-            ]
-        ],
-        use_container_width=True,
-        height=420
-    )
-
-    # =====================================================
     # DATASET
     # =====================================================
 
@@ -658,10 +579,6 @@ def render_ranking_engine(final_df):
         wrapText=False,
         autoHeight=False,
     )
-
-    # =====================================================
-    # AUTO FIT
-    # =====================================================
 
     gb.configure_grid_options(
         domLayout="normal"
@@ -810,10 +727,6 @@ def render_ranking_engine(final_df):
     }
     """)
 
-    # =====================================================
-    # APPLY COLORS
-    # =====================================================
-
     if "Keyword Classification" in filtered_df.columns:
 
         gb.configure_column(
@@ -830,10 +743,6 @@ def render_ranking_engine(final_df):
             minWidth=140,
         )
 
-    # =====================================================
-    # GRID
-    # =====================================================
-
     grid_options = gb.build()
 
     AgGrid(
@@ -846,4 +755,83 @@ def render_ranking_engine(final_df):
         enable_enterprise_modules=True,
         update_mode=GridUpdateMode.NO_UPDATE,
         reload_data=False,
+    )
+
+    # =====================================================
+    # INSIGHTS
+    # =====================================================
+
+    st.markdown(
+        "## Keyword Opportunity Intelligence"
+    )
+
+    insight_df = (
+        filtered_df
+        .groupby(
+            [
+                "Keyword Classification",
+                "Product Type",
+            ]
+        )
+        .agg({
+
+            "Keyword Phrase": "count",
+            "Opportunity Score": "mean",
+            "Search Volume": "mean",
+            "H10 PPC Sugg. Bid": "mean",
+
+        })
+        .reset_index()
+    )
+
+    insight_df.columns = [
+
+        "Classification",
+        "Product Type",
+        "Keyword Count",
+        "Avg Opportunity Score",
+        "Avg Search Volume",
+        "Avg CPC",
+
+    ]
+
+    st.dataframe(
+        insight_df,
+        use_container_width=True,
+        height=320
+    )
+
+    # =====================================================
+    # TOP KEYWORDS
+    # =====================================================
+
+    st.markdown(
+        "## Top Opportunity Keywords"
+    )
+
+    top_keywords = (
+        filtered_df
+        .sort_values(
+            by="Opportunity Score",
+            ascending=False
+        )
+        .head(50)
+    )
+
+    st.dataframe(
+        top_keywords[
+            [
+                "Keyword Phrase",
+                "Keyword Classification",
+                "Product Type",
+                "Search Volume",
+                "Cerebro IQ Score",
+                "H10 PPC Sugg. Bid",
+                "Competing Products",
+                "Opportunity Score",
+                "Action",
+            ]
+        ],
+        use_container_width=True,
+        height=420
     )
