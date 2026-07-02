@@ -1,855 +1,626 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 
-from datetime import datetime
-
+from sklearn.feature_extraction.text import CountVectorizer
 from st_aggrid import (
     AgGrid,
     GridOptionsBuilder,
     GridUpdateMode,
-    JsCode,
 )
 
 # =========================================================
-# LINK HELPERS
+# RANKING ENGINE
 # =========================================================
 
-def make_asin_link(asin):
+def render_ranking_engine():
 
-    if pd.isna(asin):
-        return asin
-
-    asin = str(asin)
-
-    return f"""
-    <a href="https://www.amazon.com/dp/{asin}"
-       target="_blank">
-       {asin}
-    </a>
-    """
-
-# =========================================================
-# LISTING AGE
-# =========================================================
-
-def calculate_listing_age(created_date):
-
-    try:
-
-        created_date = pd.to_datetime(
-            created_date,
-            errors="coerce"
-        )
-
-        if pd.isna(created_date):
-            return np.nan
-
-        today = pd.Timestamp.today()
-
-        age_days = (
-            today - created_date
-        ).days
-
-        age_months = round(
-            age_days / 30,
-            1
-        )
-
-        return age_months
-
-    except:
-
-        return np.nan
-
-# =========================================================
-# AGE SCORE
-# =========================================================
-
-def detect_listing_stage(age):
-
-    if pd.isna(age):
-        return "Unknown"
-
-    if age <= 3:
-        return "New Launch"
-
-    elif age <= 12:
-        return "Growth"
-
-    elif age <= 36:
-        return "Mature"
-
-    else:
-        return "Old Listing"
-
-# =========================================================
-# COMPETITION LEVEL
-# =========================================================
-
-def detect_competition(row):
-
-    try:
-
-        reviews = float(
-            row.get("Review Count", 0)
-        )
-
-        rating = float(
-            row.get("Review Rating", 0)
-        )
-
-        if reviews <= 50:
-            return "Low Competition"
-
-        elif reviews <= 300:
-            return "Medium Competition"
-
-        else:
-            return "High Competition"
-
-    except:
-
-        return "Unknown"
-
-# =========================================================
-# SALES LEVEL
-# =========================================================
-
-def detect_sales_level(row):
-
-    try:
-
-        sales = float(
-            row.get("Monthly Sales", 0)
-        )
-
-        if sales >= 5000:
-            return "Best Seller"
-
-        elif sales >= 1000:
-            return "Strong Seller"
-
-        elif sales >= 300:
-            return "Average Seller"
-
-        else:
-            return "Weak Seller"
-
-    except:
-
-        return "Unknown"
-
-# =========================================================
-# OPPORTUNITY SCORE
-# =========================================================
-
-def calculate_opportunity_score(row):
-
-    score = 0
-
-    try:
-
-        sales = float(
-            row.get("Monthly Sales", 0)
-        )
-
-        reviews = float(
-            row.get("Review Count", 0)
-        )
-
-        rating = float(
-            row.get("Review Rating", 0)
-        )
-
-        age = float(
-            row.get("Listing Age (Months)", 0)
-        )
-
-        # -------------------------------------------------
-        # SALES
-        # -------------------------------------------------
-
-        if sales >= 5000:
-            score += 40
-
-        elif sales >= 1000:
-            score += 30
-
-        elif sales >= 300:
-            score += 20
-
-        # -------------------------------------------------
-        # REVIEWS
-        # -------------------------------------------------
-
-        if reviews <= 50:
-            score += 30
-
-        elif reviews <= 300:
-            score += 20
-
-        else:
-            score += 10
-
-        # -------------------------------------------------
-        # RATING
-        # -------------------------------------------------
-
-        if rating >= 4.5:
-            score += 15
-
-        elif rating >= 4:
-            score += 10
-
-        # -------------------------------------------------
-        # LISTING AGE
-        # -------------------------------------------------
-
-        if age <= 6:
-            score += 15
-
-        elif age <= 24:
-            score += 10
-
-        return score
-
-    except:
-
-        return 0
-
-# =========================================================
-# COLOR TAGS
-# =========================================================
-
-def detect_color_group(score):
-
-    if score >= 80:
-        return "🟢 High Opportunity"
-
-    elif score >= 60:
-        return "🟡 Medium Opportunity"
-
-    else:
-        return "🔴 Difficult Market"
-
-# =========================================================
-# MAIN ENGINE
-# =========================================================
-
-def render_asin_engine(df):
+    st.markdown("# Ranking Engine")
 
     # =====================================================
-    # EMPTY
+    # SESSION
+    # =====================================================
+
+    if "ranking_df" not in st.session_state:
+        st.session_state.ranking_df = None
+
+    if "ranking_files" not in st.session_state:
+        st.session_state.ranking_files = []
+
+    # =====================================================
+    # CSV READER
+    # =====================================================
+
+    @st.cache_data(show_spinner=False)
+    def read_csv_safe(uploaded_file):
+
+        encodings = [
+            "utf-8",
+            "utf-8-sig",
+            "latin1",
+            "cp1252"
+        ]
+
+        separators = [
+            ",",
+            ";",
+            "\t"
+        ]
+
+        for enc in encodings:
+
+            for sep in separators:
+
+                try:
+
+                    uploaded_file.seek(0)
+
+                    df = pd.read_csv(
+                        uploaded_file,
+                        encoding=enc,
+                        sep=sep,
+                        engine="python",
+                        on_bad_lines="skip"
+                    )
+
+                    if len(df.columns) > 5:
+                        return df
+
+                except:
+                    continue
+
+        return None
+
+    # =====================================================
+    # SIDEBAR UPLOAD
+    # =====================================================
+
+    with st.sidebar:
+
+        st.markdown("---")
+        st.markdown("## Ranking Engine")
+
+        uploaded_files = st.file_uploader(
+            "Upload Ranking CSV",
+            type=["csv"],
+            accept_multiple_files=True,
+            key="ranking_upload"
+        )
+
+    # =====================================================
+    # PROCESS FILES
+    # =====================================================
+
+    if uploaded_files:
+
+        all_data = []
+
+        for uploaded_file in uploaded_files:
+
+            try:
+
+                df = read_csv_safe(uploaded_file)
+
+                if df is None:
+                    continue
+
+                all_data.append(df)
+
+            except Exception as e:
+
+                st.error(
+                    f"Error processing {uploaded_file.name}: {e}"
+                )
+
+        if all_data:
+
+            final_df = pd.concat(
+                all_data,
+                ignore_index=True
+            )
+
+            st.session_state.ranking_df = final_df
+
+            st.session_state.ranking_files = [
+                f.name for f in uploaded_files
+            ]
+
+    # =====================================================
+    # ACTIVE DATA
+    # =====================================================
+
+    df = st.session_state.ranking_df
+
+    # =====================================================
+    # EMPTY STATE
     # =====================================================
 
     if df is None or df.empty:
 
-        st.warning("No ASIN dataset loaded.")
-
+        st.info("Upload Ranking CSV to begin.")
         return
 
     # =====================================================
-    # TITLE
+    # FILE STATUS
     # =====================================================
 
-    st.markdown("# ASIN Intelligence")
-
-    # =====================================================
-    # COPY DF
-    # =====================================================
-
-    working_df = df.copy()
+    st.success(
+        f"{len(st.session_state.ranking_files)} file(s) loaded"
+    )
 
     # =====================================================
     # REQUIRED COLUMNS
     # =====================================================
 
-    if "Creation Date" in working_df.columns:
+    numeric_cols = [
+        "ABA Total Click Share",
+        "ABA Total Conv. Share",
+        "Keyword Sales",
+        "Cerebro IQ Score",
+        "Search Volume",
+        "Search Volume Trend",
+        "H10 PPC Sugg. Bid",
+        "H10 PPC Sugg. Min Bid",
+        "H10 PPC Sugg. Max Bid",
+        "Competing Products",
+        "CPR",
+        "Title Density",
+        "Organic Rank",
+        "Sponsored Rank",
+    ]
 
-        working_df["Listing Age (Months)"] = (
-            working_df["Creation Date"]
-            .apply(calculate_listing_age)
-        )
+    for col in numeric_cols:
 
-    else:
+        if col in df.columns:
 
-        working_df["Listing Age (Months)"] = np.nan
-
-    # =====================================================
-    # STAGE
-    # =====================================================
-
-    working_df["Listing Stage"] = (
-        working_df["Listing Age (Months)"]
-        .apply(detect_listing_stage)
-    )
-
-    # =====================================================
-    # SALES LEVEL
-    # =====================================================
-
-    working_df["Sales Level"] = (
-
-        working_df.apply(
-            detect_sales_level,
-            axis=1
-        )
-    )
+            df[col] = pd.to_numeric(
+                df[col],
+                errors="coerce"
+            )
 
     # =====================================================
-    # COMPETITION
+    # CLEAN KEYWORD
     # =====================================================
 
-    working_df["Competition Level"] = (
+    keyword_col = "Keyword Phrase"
 
-        working_df.apply(
-            detect_competition,
-            axis=1
-        )
-    )
+    if keyword_col not in df.columns:
 
-    # =====================================================
-    # OPPORTUNITY
-    # =====================================================
+        st.error("Missing column: Keyword Phrase")
+        return
 
-    working_df["Opportunity Score"] = (
-
-        working_df.apply(
-            calculate_opportunity_score,
-            axis=1
-        )
-    )
-
-    # =====================================================
-    # COLOR GROUP
-    # =====================================================
-
-    working_df["Market Opportunity"] = (
-
-        working_df["Opportunity Score"]
-
-        .apply(detect_color_group)
+    df[keyword_col] = (
+        df[keyword_col]
+        .astype(str)
+        .str.lower()
+        .str.strip()
     )
 
     # =====================================================
     # FILTERS
     # =====================================================
 
-    st.markdown("## Dataset Filters")
+    st.markdown("## Ranking Filters")
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2, c3 = st.columns(3)
 
-    filtered_df = working_df.copy()
+    with c1:
 
-    # -----------------------------------------------------
-    # STAGE
-    # -----------------------------------------------------
-
-    with col1:
-
-        stage_filter = st.multiselect(
-
-            "Listing Stage",
-
-            options=sorted(
-                filtered_df["Listing Stage"]
-                .dropna()
-                .unique()
-            )
+        min_search = st.number_input(
+            "Min Search Volume",
+            value=1000
         )
 
-        if stage_filter:
+    with c2:
 
-            filtered_df = filtered_df[
-                filtered_df["Listing Stage"]
-                .isin(stage_filter)
-            ]
-
-    # -----------------------------------------------------
-    # SALES
-    # -----------------------------------------------------
-
-    with col2:
-
-        sales_filter = st.multiselect(
-
-            "Sales Level",
-
-            options=sorted(
-                filtered_df["Sales Level"]
-                .dropna()
-                .unique()
-            )
+        max_comp = st.number_input(
+            "Max Competing Products",
+            value=500000
         )
 
-        if sales_filter:
+    with c3:
 
-            filtered_df = filtered_df[
-                filtered_df["Sales Level"]
-                .isin(sales_filter)
-            ]
-
-    # -----------------------------------------------------
-    # OPPORTUNITY
-    # -----------------------------------------------------
-
-    with col3:
-
-        opportunity_filter = st.multiselect(
-
-            "Market Opportunity",
-
-            options=sorted(
-                filtered_df["Market Opportunity"]
-                .dropna()
-                .unique()
-            )
+        min_iq = st.number_input(
+            "Min IQ Score",
+            value=100
         )
-
-        if opportunity_filter:
-
-            filtered_df = filtered_df[
-                filtered_df["Market Opportunity"]
-                .isin(opportunity_filter)
-            ]
 
     # =====================================================
-    # SEARCH
+    # FILTER DATA
     # =====================================================
 
-    search_value = st.text_input(
+    filtered_df = df.copy()
 
-        "Quick Search",
-
-        placeholder="Search ASIN, keyword, brand..."
-    )
-
-    if search_value:
+    if "Search Volume" in filtered_df.columns:
 
         filtered_df = filtered_df[
-
-            filtered_df.astype(str)
-
-            .apply(
-
-                lambda row:
-
-                row.str.contains(
-                    search_value,
-                    case=False,
-                    na=False
-                ).any(),
-
-                axis=1
-            )
+            filtered_df["Search Volume"] >= min_search
         ]
+
+    if "Competing Products" in filtered_df.columns:
+
+        filtered_df = filtered_df[
+            filtered_df["Competing Products"] <= max_comp
+        ]
+
+    if "Cerebro IQ Score" in filtered_df.columns:
+
+        filtered_df = filtered_df[
+            filtered_df["Cerebro IQ Score"] >= min_iq
+        ]
+
+    # =====================================================
+    # PRODUCT TYPE DETECTION
+    # =====================================================
+
+    product_keywords = [
+        "blanket",
+        "pillow",
+        "shirt",
+        "mug",
+        "tumbler",
+        "plaque",
+        "frame",
+        "wind chime",
+        "stone",
+        "lantern",
+        "necklace",
+        "bracelet",
+        "sign",
+        "poster",
+        "canvas",
+        "ornament",
+        "keychain",
+    ]
+
+    def detect_product_type(keyword):
+
+        keyword = str(keyword).lower()
+
+        for item in product_keywords:
+
+            if item in keyword:
+                return item
+
+        return "other"
+
+    filtered_df["Product Type"] = (
+        filtered_df[keyword_col]
+        .apply(detect_product_type)
+    )
+
+    # =====================================================
+    # DEMAND SCORE
+    # =====================================================
+
+    def calculate_demand_score(row):
+
+        score = 0
+
+        try:
+
+            score += (
+                row.get("Search Volume", 0) / 1000
+            )
+
+            score += (
+                row.get("Cerebro IQ Score", 0) / 50
+            )
+
+            score += (
+                row.get("Search Volume Trend", 0) / 10
+            )
+
+            score += (
+                row.get("ABA Total Click Share", 0)
+            )
+
+            score += (
+                row.get("ABA Total Conv. Share", 0)
+            )
+
+        except:
+            pass
+
+        return round(score, 2)
+
+    filtered_df["Demand Score"] = (
+        filtered_df.apply(
+            calculate_demand_score,
+            axis=1
+        )
+    )
+
+    # =====================================================
+    # COMPETITION SCORE
+    # =====================================================
+
+    def calculate_competition_score(row):
+
+        score = 0
+
+        try:
+
+            score += (
+                row.get("Competing Products", 0) / 100000
+            )
+
+            score += (
+                row.get("CPR", 0) / 10
+            )
+
+            score += (
+                row.get("Title Density", 0)
+            )
+
+            score += (
+                row.get("H10 PPC Sugg. Bid", 0) * 2
+            )
+
+        except:
+            pass
+
+        return round(score, 2)
+
+    filtered_df["Competition Score"] = (
+        filtered_df.apply(
+            calculate_competition_score,
+            axis=1
+        )
+    )
+
+    # =====================================================
+    # OPPORTUNITY SCORE
+    # =====================================================
+
+    filtered_df["Opportunity Score"] = (
+        filtered_df["Demand Score"]
+        -
+        filtered_df["Competition Score"]
+    )
+
+    # =====================================================
+    # RANKING RECOMMENDATION
+    # =====================================================
+
+    def classify_keyword(row):
+
+        opp = row["Opportunity Score"]
+
+        if opp >= 40:
+            return "Build Rank Aggressively"
+
+        elif opp >= 20:
+            return "Good Opportunity"
+
+        elif opp >= 10:
+            return "Moderate"
+
+        return "Highly Competitive"
+
+    filtered_df["Recommendation"] = (
+        filtered_df.apply(
+            classify_keyword,
+            axis=1
+        )
+    )
 
     # =====================================================
     # METRICS
     # =====================================================
 
-    c1, c2, c3, c4 = st.columns(4)
+    st.markdown("## Ranking Intelligence")
 
-    c1.metric(
-        "ASIN Count",
-        f"{len(filtered_df):,}"
+    m1, m2, m3, m4 = st.columns(4)
+
+    m1.metric(
+        "Keywords",
+        len(filtered_df)
     )
 
-    c2.metric(
-        "Avg Listing Age",
-        f"{round(filtered_df['Listing Age (Months)'].mean(),1)} M"
-        if "Listing Age (Months)" in filtered_df.columns
-        else "0"
+    m2.metric(
+        "Avg Search Volume",
+        f"{int(filtered_df['Search Volume'].mean()):,}"
+        if "Search Volume" in filtered_df.columns
+        else "-"
     )
 
-    c3.metric(
+    m3.metric(
+        "Avg IQ Score",
+        round(
+            filtered_df["Cerebro IQ Score"].mean(),
+            1
+        )
+        if "Cerebro IQ Score" in filtered_df.columns
+        else "-"
+    )
+
+    m4.metric(
         "Avg Opportunity",
-        f"{round(filtered_df['Opportunity Score'].mean(),1)}"
-        if "Opportunity Score" in filtered_df.columns
-        else "0"
-    )
-
-    c4.metric(
-        "Unique Keywords",
-        filtered_df["Keyword Search"]
-        .nunique()
-        if "Keyword Search" in filtered_df.columns
-        else 0
+        round(
+            filtered_df["Opportunity Score"].mean(),
+            1
+        )
     )
 
     # =====================================================
-    # DISPLAY DF
+    # PRODUCT TYPE INSIGHTS
     # =====================================================
 
-    display_df = filtered_df.copy()
+    st.markdown("## Product Type Demand")
 
-    # =====================================================
-    # ASIN LINK
-    # =====================================================
+    product_summary = (
+        filtered_df.groupby("Product Type")
+        .agg({
+            "Keyword Phrase": "count",
+            "Search Volume": "mean",
+            "Opportunity Score": "mean",
+        })
+        .reset_index()
+    )
 
-    asin_col_candidates = [
-
-        "ASIN",
-        "Asin",
-        "asin"
+    product_summary.columns = [
+        "Product Type",
+        "Keyword Count",
+        "Avg Search Volume",
+        "Avg Opportunity Score",
     ]
 
-    asin_col = None
-
-    for col in asin_col_candidates:
-
-        if col in display_df.columns:
-
-            asin_col = col
-
-            break
-
-    if asin_col:
-
-        display_df[asin_col] = (
-
-            display_df[asin_col]
-
-            .apply(make_asin_link)
-        )
-
-    # =====================================================
-    # IMAGE HTML
-    # =====================================================
-
-    image_col_candidates = [
-
-        "Image URL",
-        "Image",
-        "Main Image"
-    ]
-
-    image_col = None
-
-    for col in image_col_candidates:
-
-        if col in display_df.columns:
-
-            image_col = col
-
-            break
-
-    if image_col:
-
-        display_df[image_col] = (
-
-            display_df[image_col]
-
-            .apply(
-
-                lambda x:
-
-                f"""
-                <img src="{x}"
-                     width="70"
-                     style="border-radius:8px;">
-                """
-
-                if pd.notna(x)
-                else ""
-            )
-        )
-
-    # =====================================================
-    # GRID
-    # =====================================================
-
-    gb = GridOptionsBuilder.from_dataframe(
-        display_df
+    product_summary = product_summary.sort_values(
+        by="Avg Opportunity Score",
+        ascending=False
     )
 
-    gb.configure_default_column(
-
-        sortable=True,
-        filter=True,
-        resizable=True,
-        editable=False,
-        floatingFilter=True,
-
-        minWidth=140,
-        flex=1,
+    st.dataframe(
+        product_summary,
+        use_container_width=True,
+        height=320
     )
 
     # =====================================================
-    # PIN FIRST
+    # BEST KEYWORDS
     # =====================================================
 
-    first_col = display_df.columns[0]
-
-    gb.configure_column(
-
-        first_col,
-
-        pinned="left",
-        width=160
-    )
+    best_keywords = filtered_df.sort_values(
+        by="Opportunity Score",
+        ascending=False
+    ).head(100)
 
     # =====================================================
-    # WIDTHS
+    # HARD KEYWORDS
     # =====================================================
 
-    for col in display_df.columns:
-
-        width = 160
-
-        col_lower = col.lower()
-
-        if "title" in col_lower:
-            width = 420
-
-        elif "keyword" in col_lower:
-            width = 240
-
-        elif "image" in col_lower:
-            width = 120
-
-        elif "asin" in col_lower:
-            width = 140
-
-        elif "score" in col_lower:
-            width = 150
-
-        gb.configure_column(
-            col,
-            width=width
-        )
-
-    # =====================================================
-    # HTML RENDERER
-    # =====================================================
-
-    cell_renderer = JsCode("""
-
-    class UrlCellRenderer {
-
-      init(params) {
-
-        this.eGui = document.createElement('div');
-
-        this.eGui.innerHTML = params.value || "";
-      }
-
-      getGui() {
-
-        return this.eGui;
-      }
-    }
-
-    """)
-
-    if asin_col:
-
-        gb.configure_column(
-
-            asin_col,
-
-            cellRenderer=cell_renderer
-        )
-
-    if image_col:
-
-        gb.configure_column(
-
-            image_col,
-
-            cellRenderer=cell_renderer
-        )
-
-    # =====================================================
-    # COLOR RULES
-    # =====================================================
-
-    gb.configure_column(
-
-        "Market Opportunity",
-
-        cellStyle=JsCode("""
-
-        function(params) {
-
-            if (params.value.includes("🟢")) {
-
-                return {
-                    'backgroundColor': '#14532d',
-                    'color': 'white',
-                    'fontWeight': 'bold'
-                }
-            }
-
-            if (params.value.includes("🟡")) {
-
-                return {
-                    'backgroundColor': '#854d0e',
-                    'color': 'white',
-                    'fontWeight': 'bold'
-                }
-            }
-
-            return {
-                'backgroundColor': '#7f1d1d',
-                'color': 'white',
-                'fontWeight': 'bold'
-            }
-        }
-
-        """)
-    )
-
-    # =====================================================
-    # GRID OPTIONS
-    # =====================================================
-
-    grid_options = gb.build()
-
-    grid_options["domLayout"] = "normal"
-
-    grid_options["animateRows"] = True
-
-    grid_options["rowHeight"] = 90
-
-    # =====================================================
-    # TABLE
-    # =====================================================
-
-    st.markdown("## ASIN Market Intelligence")
-
-    try:
-
-        AgGrid(
-
-            display_df,
-
-            gridOptions=grid_options,
-
-            theme="alpine-dark",
-
-            height=720,
-
-            fit_columns_on_grid_load=False,
-
-            update_mode=GridUpdateMode.NO_UPDATE,
-
-            allow_unsafe_jscode=True,
-
-            enable_enterprise_modules=False,
-
-            reload_data=False,
-        )
-
-    except Exception as e:
-
-        st.error(f"AgGrid Error: {e}")
-
-        st.dataframe(
-            filtered_df,
-            use_container_width=True
-        )
-
-    # =====================================================
-    # INSIGHTS
-    # =====================================================
-
-    st.markdown("---")
-
-    st.markdown("# Strategic ASIN Insights")
-
-    # =====================================================
-    # HIGH OPPORTUNITY
-    # =====================================================
-
-    high_opportunity_df = filtered_df[
-
-        filtered_df["Market Opportunity"]
-
-        == "🟢 High Opportunity"
-    ]
-
-    # =====================================================
-    # NEW LISTINGS
-    # =====================================================
-
-    new_listing_df = filtered_df[
-
-        filtered_df["Listing Stage"]
-
-        == "New Launch"
-    ]
-
-    # =====================================================
-    # BEST SELLERS
-    # =====================================================
-
-    best_seller_df = filtered_df[
-
-        filtered_df["Sales Level"]
-
-        == "Best Seller"
-    ]
+    hard_keywords = filtered_df.sort_values(
+        by="Competition Score",
+        ascending=False
+    ).head(100)
 
     # =====================================================
     # TABS
     # =====================================================
 
     tab1, tab2, tab3 = st.tabs([
-
-        "High Opportunity",
-        "New Listings",
-        "Best Sellers"
+        "Best Keywords",
+        "Competitive Keywords",
+        "All Keywords"
     ])
 
     # =====================================================
-    # TAB 1
+    # BEST KW
     # =====================================================
 
     with tab1:
 
-        st.metric(
-            "High Opportunity ASINs",
-            len(high_opportunity_df)
+        st.markdown(
+            "### Keywords Recommended To Build Rank"
         )
 
         st.dataframe(
-            high_opportunity_df,
+            best_keywords[[
+                "Keyword Phrase",
+                "Product Type",
+                "Search Volume",
+                "Cerebro IQ Score",
+                "Competition Score",
+                "Opportunity Score",
+                "Recommendation"
+            ]],
             use_container_width=True,
-            height=500
+            height=700
         )
 
     # =====================================================
-    # TAB 2
+    # HARD KW
     # =====================================================
 
     with tab2:
 
-        st.metric(
-            "New Listings",
-            len(new_listing_df)
+        st.markdown(
+            "### Hard / Expensive Keywords"
         )
 
         st.dataframe(
-            new_listing_df,
+            hard_keywords[[
+                "Keyword Phrase",
+                "Product Type",
+                "Search Volume",
+                "Competing Products",
+                "H10 PPC Sugg. Bid",
+                "Competition Score",
+                "Recommendation"
+            ]],
             use_container_width=True,
-            height=500
+            height=700
         )
 
     # =====================================================
-    # TAB 3
+    # ALL KW
     # =====================================================
 
     with tab3:
 
-        st.metric(
-            "Best Sellers",
-            len(best_seller_df)
+        gb = GridOptionsBuilder.from_dataframe(
+            filtered_df
         )
 
-        st.dataframe(
-            best_seller_df,
-            use_container_width=True,
-            height=500
+        gb.configure_default_column(
+            sortable=True,
+            filter=True,
+            resizable=True,
+            floatingFilter=True,
+        )
+
+        grid_options = gb.build()
+
+        AgGrid(
+            filtered_df,
+            gridOptions=grid_options,
+            theme="streamlit",
+            height=800,
+            update_mode=GridUpdateMode.NO_UPDATE,
+            fit_columns_on_grid_load=True,
+            reload_data=False,
+        )
+
+    # =====================================================
+    # STRATEGIC INSIGHTS
+    # =====================================================
+
+    st.markdown("## Strategic Insights")
+
+    top_build = (
+        filtered_df[
+            filtered_df["Recommendation"]
+            ==
+            "Build Rank Aggressively"
+        ]
+        .head(10)
+    )
+
+    if not top_build.empty:
+
+        st.success(
+            f"""
+            High-opportunity keywords detected:
+            {len(top_build)} keywords should be prioritized
+            for ranking campaigns.
+            """
+        )
+
+    high_comp = (
+        filtered_df[
+            filtered_df["Recommendation"]
+            ==
+            "Highly Competitive"
+        ]
+    )
+
+    if not high_comp.empty:
+
+        st.warning(
+            f"""
+            {len(high_comp)} keywords are highly competitive.
+            Avoid aggressive PPC unless conversion rate is high.
+            """
         )
