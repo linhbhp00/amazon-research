@@ -388,60 +388,72 @@ def render_asin_engine(final_df):
     # =====================================================
     # SALES / REVENUE
     # =====================================================
-
+    
     sales_col = None
     revenue_col = None
-
+    
     for col in [
         "ASIN Sales",
         "Sales",
     ]:
-
+    
         if col in final_df.columns:
-
+    
             sales_col = col
             break
-
+    
     for col in [
         "ASIN Revenue",
         "Revenue",
+        "Parent Level Revenue",
     ]:
-
+    
         if col in final_df.columns:
-
+    
             revenue_col = col
             break
-
+    
+    # =====================================================
+    # SALES
+    # =====================================================
+    
     if sales_col:
-
+    
         final_df["ASIN Sales"] = (
             final_df[sales_col]
             .apply(clean_numeric)
             .astype(int)
         )
-
+    
     else:
-
+    
         final_df["ASIN Sales"] = 0
-
+    
+    # =====================================================
+    # REVENUE
+    # =====================================================
+    
     if revenue_col:
-
-        # numeric dùng cho chart/filter
+    
+        # numeric value for chart/groupby
         final_df["_ASIN Revenue Numeric"] = (
             final_df[revenue_col]
             .apply(clean_numeric)
         )
     
-            # display format US
-            final_df["ASIN Revenue"] = (
-                final_df["_ASIN Revenue Numeric"]
-                .apply(lambda x: f"{x:,.2f}")
+        # formatted display
+        final_df["_ASIN Revenue Numeric"] = (
+            final_df["_ASIN Revenue Numeric"]
+            .apply(
+                lambda x: f"{x:,.2f}"
             )
-        
-        else:
-        
-            final_df["_ASIN Revenue Numeric"] = 0
-            final_df["ASIN Revenue"] = "0.00"
+        )
+    
+    else:
+    
+        final_df["_ASIN Revenue Numeric"] = 0
+    
+        final_df["_ASIN Revenue Numeric"] = "0.00"
 
     # =====================================================
     # LISTING AGE
@@ -655,7 +667,7 @@ def render_asin_engine(final_df):
         "ASIN",
         "Image",
         "ASIN Sales",
-        "ASIN Revenue",
+        "_ASIN Revenue Numeric",
     ]:
 
         if col in filtered_df.columns:
