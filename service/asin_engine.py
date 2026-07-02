@@ -1,9 +1,12 @@
+# =========================================================
+# service/asin_engine.py
+# =========================================================
+
 import streamlit as st
 import pandas as pd
 import numpy as np
 
 from datetime import datetime
-
 from st_aggrid import (
     AgGrid,
     GridOptionsBuilder,
@@ -14,7 +17,63 @@ from st_aggrid import (
 from utils.csv_utils import read_csv_safe
 
 # =========================================================
-# ASIN ENGINE
+# HELPERS
+# =========================================================
+
+def calculate_listing_age(date_value):
+
+    try:
+
+        created = pd.to_datetime(
+            date_value,
+            errors="coerce"
+        )
+
+        if pd.isna(created):
+            return np.nan
+
+        today = pd.Timestamp.today()
+
+        age_days = (today - created).days
+
+        return round(age_days / 30)
+
+    except:
+        return np.nan
+
+
+def classify_listing_age(months):
+
+    if pd.isna(months):
+        return "Unknown"
+
+    if months <= 3:
+        return "New Launch"
+
+    elif months <= 12:
+        return "Growing"
+
+    elif months <= 36:
+        return "Mature"
+
+    return "Established"
+
+
+def age_color(status):
+
+    mapping = {
+        "New Launch": "#22c55e",
+        "Growing": "#3b82f6",
+        "Mature": "#f59e0b",
+        "Established": "#ef4444",
+        "Unknown": "#6b7280"
+    }
+
+    return mapping.get(status, "#6b7280")
+
+
+# =========================================================
+# MAIN ENGINE
 # =========================================================
 
 def render_asin_engine():
@@ -22,7 +81,7 @@ def render_asin_engine():
     st.markdown("# ASIN Intelligence")
 
     # =====================================================
-    # SESSION STATE
+    # SESSION
     # =====================================================
 
     if "asin_df" not in st.session_state:
@@ -32,39 +91,24 @@ def render_asin_engine():
         st.session_state.asin_file_names = []
 
     # =====================================================
-    # SIDEBAR
+    # SIDEBAR IMPORT
     # =====================================================
 
     st.sidebar.markdown("---")
-
-    st.sidebar.markdown(
-        "### ASIN Intelligence"
-    )
+    st.sidebar.markdown("### ASIN Intelligence")
 
     uploaded_files = st.sidebar.file_uploader(
         "Upload ASIN CSV",
         type=["csv"],
         accept_multiple_files=True,
-        key="asin_uploader"
+        key="asin_csv"
     )
 
     # =====================================================
-    # PROCESS ONLY WHEN FILE CHANGED
+    # PROCESS FILES
     # =====================================================
 
-    current_uploaded_names = []
-
     if uploaded_files:
-
-        current_uploaded_names = [
-            f.name for f in uploaded_files
-        ]
-
-    if (
-        uploaded_files
-        and current_uploaded_names
-        != st.session_state.asin_file_names
-    ):
 
         all_data = []
 
@@ -75,267 +119,81 @@ def render_asin_engine():
                 df = read_csv_safe(uploaded_file)
 
                 if df is None:
-
                     st.warning(
-                        f"Cannot read file: "
-                        f"{uploaded_file.name}"
+                        f"Cannot read {uploaded_file.name}"
                     )
-
                     continue
 
-                # ==========================================
-                # CLEAN HEADER
-                # ==========================================
+                # =========================================
+                # FIX HEADER
+                # =========================================
+
+                if df.columns.tolist()[0] == 0:
+
+                    header_row = df.iloc[0]
+
+                    df = df[1:].copy()
+
+                    df.columns = header_row
+
+                df = df.reset_index(drop=True)
+
+                # =========================================
+                # STANDARDIZE COLUMNS
+                # =========================================
 
                 df.columns = [
                     str(col).strip()
                     for col in df.columns
                 ]
 
-                # ==========================================
-                # NUMERIC COLUMNS
-                # ==========================================
+                # =========================================
+                # LISTING AGE
+                # =========================================
 
-                numeric_cols = [
-                    "Price",
-                    "Review Count",
-                    "Review Rating",
-                    "BSR",
-                    "Bought in past month"
+                creation_col = None
+
+                possible_dates = [
+                    "Creation Date",
+                    "creation date",
+                    "Created",
+                    "Date First Available"
                 ]
 
-                for col in numeric_cols:
+                for col in possible_dates:
 
                     if col in df.columns:
+                        creation_col = col
+                        break
 
-                        df[col] = (
-                            df[col]
-                            .astype(str)
-                            .str.replace(",", "")
-                            .str.replace("$", "")
-                        )
+                if creation_col:
 
-                        df[col] = pd.to_numeric(
-                            df[col],
-                            errors="coerce"
-                        )
-
-                # ==========================================
-                # CREATION DATE
-                # ==========================================
-
-                if "Creation Date" in df.columns:
-
-                    df["Creation Date"] = (
-                        pd.to_datetime(
-                            df["Creation Date"],
-                            errors="coerce"
-                        )
+                    df["Listing Age (Months)"] = (
+                        df[creation_col]
+                        .apply(calculate_listing_age)
                     )
 
-                    today = pd.Timestamp.today()
-
-                    df["Listing Age Days"] = (
-                        today - df["Creation Date"]
-                    ).dt.days
-
-                    df["Listing Age Months"] = (
-                        df["Listing Age Days"] / 30
-                    ).round(1)
-
-                # ==========================================
-                # LISTING AGE GROUP
-                # ==========================================
-
-                if "Listing Age Months" in df.columns:
-
-                    def classify_listing_age(months):
-
-                        if pd.isna(months):
-                            return "Unknown"
-
-                        if months <= 3:
-                            return "🟢 New Launch"
-
-                        elif months <= 12:
-                            return "🟡 Growth"
-
-                        elif months <= 36:
-                            return "🟠 Mature"
-
-                        else:
-                            return "🔴 Old Listing"
-
-                    df["Listing Stage"] = (
-                        df["Listing Age Months"]
+                    df["Listing Status"] = (
+                        df["Listing Age (Months)"]
                         .apply(classify_listing_age)
                     )
 
-                # ==========================================
-                # SCORE ENGINE
-                # ==========================================
+                else:
 
-                score = np.zeros(len(df))
+                    df["Listing Age (Months)"] = np.nan
 
-                # Reviews
-                if "Review Count" in df.columns:
+                    df["Listing Status"] = "Unknown"
 
-                    score += np.where(
-                        df["Review Count"] < 50,
-                        25,
-                        0
-                    )
-
-                    score += np.where(
-                        (
-                            df["Review Count"] >= 50
-                        )
-                        &
-                        (
-                            df["Review Count"] < 300
-                        ),
-                        15,
-                        0
-                    )
-
-                # Listing age
-                if "Listing Age Months" in df.columns:
-
-                    score += np.where(
-                        df["Listing Age Months"] <= 6,
-                        25,
-                        0
-                    )
-
-                    score += np.where(
-                        (
-                            df["Listing Age Months"] > 6
-                        )
-                        &
-                        (
-                            df["Listing Age Months"] <= 18
-                        ),
-                        15,
-                        0
-                    )
-
-                # BSR
-                if "BSR" in df.columns:
-
-                    score += np.where(
-                        df["BSR"] <= 5000,
-                        25,
-                        0
-                    )
-
-                    score += np.where(
-                        (
-                            df["BSR"] > 5000
-                        )
-                        &
-                        (
-                            df["BSR"] <= 20000
-                        ),
-                        15,
-                        0
-                    )
-
-                # Rating
-                if "Review Rating" in df.columns:
-
-                    score += np.where(
-                        df["Review Rating"] >= 4.5,
-                        25,
-                        0
-                    )
-
-                    score += np.where(
-                        (
-                            df["Review Rating"] >= 4.0
-                        )
-                        &
-                        (
-                            df["Review Rating"] < 4.5
-                        ),
-                        15,
-                        0
-                    )
-
-                df["Opportunity Score"] = score
-
-                # ==========================================
-                # OPPORTUNITY LEVEL
-                # ==========================================
-
-                def classify_opportunity(score):
-
-                    if score >= 80:
-                        return "🟢 High Opportunity"
-
-                    elif score >= 55:
-                        return "🟡 Medium Opportunity"
-
-                    else:
-                        return "🔴 Competitive"
-
-                df["Opportunity Level"] = (
-                    df["Opportunity Score"]
-                    .apply(classify_opportunity)
-                )
-
-                # ==========================================
-                # IMAGE HTML
-                # ==========================================
-
-                if "Image URL" in df.columns:
-
-                    df["Image"] = (
-                        df["Image URL"]
-                        .apply(
-                            lambda x:
-                            f"""
-                            <img src="{x}"
-                            width="70">
-                            """
-                            if pd.notna(x)
-                            else ""
-                        )
-                    )
-
-                # ==========================================
-                # ASIN LINK
-                # ==========================================
+                # =========================================
+                # ASIN URL
+                # =========================================
 
                 if "ASIN" in df.columns:
 
-                    if "URL" in df.columns:
-
-                        df["ASIN Link"] = df.apply(
-                            lambda row:
-                            f"""
-                            <a href="{row['URL']}"
-                            target="_blank">
-                            {row['ASIN']}
-                            </a>
-                            """,
-                            axis=1
-                        )
-
-                    else:
-
-                        df["ASIN Link"] = (
-                            df["ASIN"]
-                            .apply(
-                                lambda x:
-                                f"""
-                                <a href=
-                                "https://www.amazon.com/dp/{x}"
-                                target="_blank">
-                                {x}
-                                </a>
-                                """
-                            )
-                        )
+                    df["Amazon Link"] = (
+                        "https://www.amazon.com/dp/"
+                        + df["ASIN"].astype(str)
+                    )
 
                 all_data.append(df)
 
@@ -346,9 +204,9 @@ def render_asin_engine():
                     f"{uploaded_file.name}: {e}"
                 )
 
-        # ==============================================
+        # =============================================
         # SAVE SESSION
-        # ==============================================
+        # =============================================
 
         if all_data:
 
@@ -359,15 +217,15 @@ def render_asin_engine():
 
             st.session_state.asin_df = final_df
 
-            st.session_state.asin_file_names = (
-                current_uploaded_names
-            )
+            st.session_state.asin_file_names = [
+                f.name for f in uploaded_files
+            ]
 
     # =====================================================
     # ACTIVE DATA
     # =====================================================
 
-    df = st.session_state.asin_df
+    final_df = st.session_state.asin_df
 
     # =====================================================
     # FILE STATUS
@@ -375,17 +233,11 @@ def render_asin_engine():
 
     if st.session_state.asin_file_names:
 
-        st.sidebar.success(
-            "ASIN Dataset Loaded"
-        )
+        st.sidebar.success("ASIN Dataset Loaded")
 
-        for file_name in (
-            st.session_state.asin_file_names
-        ):
+        for file_name in st.session_state.asin_file_names:
 
-            st.sidebar.caption(
-                f"• {file_name}"
-            )
+            st.sidebar.caption(f"• {file_name}")
 
         if st.sidebar.button(
             "Clear ASIN Dataset"
@@ -398,79 +250,59 @@ def render_asin_engine():
             st.rerun()
 
     # =====================================================
-    # EMPTY
+    # EMPTY STATE
     # =====================================================
 
-    if df is None or df.empty:
+    if final_df is None or final_df.empty:
 
-        st.info(
-            "Upload ASIN CSV to begin."
-        )
-
+        st.info("Upload ASIN CSV files.")
         return
 
     # =====================================================
     # FILTERS
     # =====================================================
 
-    col1, col2, col3 = st.columns(3)
+    c1, c2 = st.columns(2)
 
-    with col1:
+    with c1:
 
-        opportunity_filter = st.multiselect(
-            "Opportunity Level",
+        status_filter = st.multiselect(
+            "Listing Status",
             options=sorted(
-                df["Opportunity Level"]
+                final_df["Listing Status"]
                 .dropna()
                 .unique()
             )
         )
 
-    with col2:
+    with c2:
 
-        listing_filter = st.multiselect(
-            "Listing Stage",
-            options=sorted(
-                df["Listing Stage"]
-                .dropna()
-                .unique()
-            )
-        )
-
-    with col3:
-
-        keyword_search = st.text_input(
-            "Keyword Search"
+        search_value = st.text_input(
+            "Quick Search",
+            placeholder="Search ASIN..."
         )
 
     # =====================================================
     # FILTER DATA
     # =====================================================
 
-    filtered_df = df.copy()
+    filtered_df = final_df.copy()
 
-    if opportunity_filter:
-
-        filtered_df = filtered_df[
-            filtered_df["Opportunity Level"]
-            .isin(opportunity_filter)
-        ]
-
-    if listing_filter:
+    if status_filter:
 
         filtered_df = filtered_df[
-            filtered_df["Listing Stage"]
-            .isin(listing_filter)
+            filtered_df["Listing Status"]
+            .isin(status_filter)
         ]
 
-    if keyword_search:
+    if search_value:
 
         filtered_df = filtered_df[
             filtered_df.astype(str)
             .apply(
                 lambda row:
                 row.str.contains(
-                    keyword_search,
+                    search_value,
                     case=False,
                     na=False
                 ).any(),
@@ -482,41 +314,39 @@ def render_asin_engine():
     # METRICS
     # =====================================================
 
-    c1, c2, c3, c4 = st.columns(4)
+    m1, m2, m3, m4 = st.columns(4)
 
-    c1.metric(
-        "Total ASINs",
+    m1.metric(
+        "Total ASIN",
         f"{len(filtered_df):,}"
     )
 
-    c2.metric(
-        "Avg Opportunity",
-        round(
-            filtered_df[
-                "Opportunity Score"
-            ].mean(),
-            1
-        )
-    )
-
-    c3.metric(
-        "New Listings",
+    m2.metric(
+        "New Launch",
         len(
             filtered_df[
-                filtered_df[
-                    "Listing Stage"
-                ] == "🟢 New Launch"
+                filtered_df["Listing Status"]
+                == "New Launch"
             ]
         )
     )
 
-    c4.metric(
-        "High Opportunity",
+    m3.metric(
+        "Growing",
         len(
             filtered_df[
-                filtered_df[
-                    "Opportunity Level"
-                ] == "🟢 High Opportunity"
+                filtered_df["Listing Status"]
+                == "Growing"
+            ]
+        )
+    )
+
+    m4.metric(
+        "Established",
+        len(
+            filtered_df[
+                filtered_df["Listing Status"]
+                == "Established"
             ]
         )
     )
@@ -525,34 +355,50 @@ def render_asin_engine():
     # INSIGHTS
     # =====================================================
 
-    st.markdown("## Strategic Insights")
+    st.markdown("## ASIN Market Insights")
 
-    high_opportunity = filtered_df[
-        filtered_df["Opportunity Level"]
-        == "🟢 High Opportunity"
-    ]
+    insight_rows = []
 
-    if len(high_opportunity) > 0:
+    for status in [
+        "New Launch",
+        "Growing",
+        "Mature",
+        "Established"
+    ]:
 
-        st.success(
-            f"""
-            Detected {len(high_opportunity)}
-            high-opportunity ASINs with:
+        temp_df = filtered_df[
+            filtered_df["Listing Status"]
+            == status
+        ]
 
-            • low reviews
-            • strong BSR
-            • newer listings
-            • high ratings
+        if len(temp_df) > 0:
 
-            Potential niche expansion opportunity.
-            """
-        )
+            insight_rows.append({
+
+                "Group": status,
+
+                "Total ASIN": len(temp_df),
+
+                "Avg Listing Age": round(
+                    temp_df[
+                        "Listing Age (Months)"
+                    ].mean(),
+                    1
+                )
+            })
+
+    insight_df = pd.DataFrame(insight_rows)
+
+    st.dataframe(
+        insight_df,
+        use_container_width=True
+    )
 
     # =====================================================
-    # GRID
+    # AGGRID
     # =====================================================
 
-    st.markdown("## ASIN Intelligence Table")
+    st.markdown("## ASIN Intelligence Dashboard")
 
     gb = GridOptionsBuilder.from_dataframe(
         filtered_df
@@ -563,22 +409,21 @@ def render_asin_engine():
         filter=True,
         resizable=True,
         floatingFilter=True,
-        editable=False,
-        minWidth=120
+        minWidth=140
     )
 
-    # ==============================================
+    # =====================================================
     # IMAGE RENDERER
-    # ==============================================
+    # =====================================================
 
     image_renderer = JsCode("""
-    class ImgCellRenderer {
+    class ThumbnailRenderer {
         init(params) {
-            this.eGui =
-            document.createElement('div');
-
-            this.eGui.innerHTML =
-            params.value;
+            this.eGui = document.createElement('img');
+            this.eGui.src = params.value;
+            this.eGui.width = 60;
+            this.eGui.height = 60;
+            this.eGui.style.borderRadius = '8px';
         }
 
         getGui() {
@@ -587,18 +432,29 @@ def render_asin_engine():
     }
     """)
 
-    # ==============================================
+    # =====================================================
     # LINK RENDERER
-    # ==============================================
+    # =====================================================
 
     link_renderer = JsCode("""
-    class UrlCellRenderer {
+    class LinkRenderer {
         init(params) {
-            this.eGui =
-            document.createElement('div');
 
-            this.eGui.innerHTML =
-            params.value;
+            this.eGui = document.createElement('a');
+
+            this.eGui.innerText = params.value;
+
+            this.eGui.setAttribute(
+                'href',
+                'https://www.amazon.com/dp/' + params.value
+            );
+
+            this.eGui.setAttribute(
+                'target',
+                '_blank'
+            );
+
+            this.eGui.style.color = '#60a5fa';
         }
 
         getGui() {
@@ -607,33 +463,84 @@ def render_asin_engine():
     }
     """)
 
-    if "Image" in filtered_df.columns:
+    # =====================================================
+    # STATUS COLOR
+    # =====================================================
+
+    status_style = JsCode("""
+    function(params) {
+
+        if (params.value == 'New Launch') {
+            return {
+                'backgroundColor': '#14532d',
+                'color': 'white'
+            }
+        }
+
+        if (params.value == 'Growing') {
+            return {
+                'backgroundColor': '#1e3a8a',
+                'color': 'white'
+            }
+        }
+
+        if (params.value == 'Mature') {
+            return {
+                'backgroundColor': '#78350f',
+                'color': 'white'
+            }
+        }
+
+        if (params.value == 'Established') {
+            return {
+                'backgroundColor': '#7f1d1d',
+                'color': 'white'
+            }
+        }
+    }
+    """)
+
+    # =====================================================
+    # COLUMN CONFIG
+    # =====================================================
+
+    if "Image URL" in filtered_df.columns:
 
         gb.configure_column(
-            "Image",
+            "Image URL",
+            header_name="Image",
             cellRenderer=image_renderer,
             width=90
         )
 
-    if "ASIN Link" in filtered_df.columns:
+    if "ASIN" in filtered_df.columns:
 
         gb.configure_column(
-            "ASIN Link",
+            "ASIN",
             cellRenderer=link_renderer,
             width=140
         )
 
-    grid_options = gb.build()
+    if "Listing Status" in filtered_df.columns:
 
-    grid_options["rowHeight"] = 90
+        gb.configure_column(
+            "Listing Status",
+            cellStyle=status_style,
+            width=150
+        )
+
+    # =====================================================
+    # BUILD GRID
+    # =====================================================
+
+    grid_options = gb.build()
 
     AgGrid(
         filtered_df,
         gridOptions=grid_options,
         theme="alpine-dark",
-        height=850,
-        fit_columns_on_grid_load=False,
-        update_mode=GridUpdateMode.NO_UPDATE,
+        height=720,
         allow_unsafe_jscode=True,
         enable_enterprise_modules=True,
+        update_mode=GridUpdateMode.NO_UPDATE
     )
