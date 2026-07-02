@@ -32,8 +32,9 @@ def read_csv_safe(uploaded_file):
                     on_bad_lines="skip"
                 )
 
-                # validate dataframe
+                # đảm bảo không phải file lỗi
                 if len(df.columns) > 3:
+
                     return df
 
             except:
