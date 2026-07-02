@@ -10,7 +10,8 @@ from service.ranking_engine import render_ranking_engine
 # =========================================================
 
 st.set_page_config(
-    page_title="Amazon Research Dashboard",
+    page_title="Amazon Research Intelligence System",
+    page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -22,37 +23,66 @@ st.set_page_config(
 st.markdown("""
 <style>
 
-html, body, [class*="css"]  {
-    background-color: #050816;
-    color: white;
+html,
+body,
+[class*="css"]{
+    background:#050816;
+    color:white;
 }
 
-.block-container {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    max-width: 100%;
+.block-container{
+    padding-top:1rem;
+    padding-bottom:1rem;
+    max-width:100%;
 }
 
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-    border-right: 1px solid #1f2937;
+/* ---------------- Sidebar ---------------- */
+
+section[data-testid="stSidebar"]{
+    background:#111827;
+    border-right:1px solid #1f2937;
 }
 
-section[data-testid="stSidebar"] * {
-    color: white;
+section[data-testid="stSidebar"] *{
+    color:white;
 }
 
-.dashboard-title {
-    font-size: 42px;
-    font-weight: 800;
-    margin-bottom: 10px;
+.dashboard-title{
+    font-size:42px;
+    font-weight:800;
+    margin-bottom:20px;
 }
 
-div[data-testid="stMetric"] {
-    background: #111827;
-    border: 1px solid #1f2937;
-    padding: 14px;
-    border-radius: 12px;
+/* ---------------- Metric ---------------- */
+
+div[data-testid="stMetric"]{
+    background:#111827;
+    border:1px solid #1f2937;
+    border-radius:12px;
+    padding:14px;
+}
+
+/* ---------------- Sidebar Radio ---------------- */
+
+div[role="radiogroup"] > label{
+
+    background:#111827;
+
+    border:1px solid #1f2937;
+
+    padding:12px;
+
+    border-radius:10px;
+
+    margin-bottom:8px;
+
+    transition:0.2s;
+}
+
+div[role="radiogroup"] > label:hover{
+
+    background:#1f2937;
+
 }
 
 </style>
@@ -98,7 +128,7 @@ def read_csv_safe(uploaded_file):
                     return df
 
             except:
-                continue
+                pass
 
     return None
 
@@ -110,8 +140,17 @@ st.sidebar.title("MRnD")
 
 st.sidebar.markdown("### Amazon Research Intelligence")
 
+page = st.sidebar.radio(
+    "",
+    [
+        "Keyword Intelligence",
+        "ASIN Intelligence",
+        "Ranking Engine"
+    ]
+)
+
 # =========================================================
-# MAIN TITLE
+# MAIN HEADER
 # =========================================================
 
 st.markdown(
@@ -124,21 +163,10 @@ st.markdown(
 )
 
 # =========================================================
-# MAIN TABS
+# PAGE : KEYWORD ENGINE
 # =========================================================
 
-main_tab1, main_tab2, main_tab3 = st.tabs([
-
-    "Keyword Intelligence",
-    "ASIN Intelligence",
-    "Ranking Engine"
-])
-
-# =========================================================
-# TAB 1 — KEYWORD ENGINE
-# =========================================================
-
-with main_tab1:
+if page == "Keyword Intelligence":
 
     st.markdown("## Upload Keyword CSV")
 
@@ -163,7 +191,7 @@ with main_tab1:
 
             else:
 
-                st.error(f"Cannot read file: {file.name}")
+                st.error(f"Cannot read file : {file.name}")
 
     if keyword_data:
 
@@ -172,29 +200,29 @@ with main_tab1:
             ignore_index=True
         )
 
-        # =================================================
-        # FILTERS
-        # =================================================
+        # ==========================================
+        # FILTER
+        # ==========================================
 
         st.markdown("## Keyword Filters")
 
-        filter_cols = st.columns(3)
+        c1, c2, c3 = st.columns(3)
 
-        with filter_cols[0]:
+        with c1:
 
             search_value = st.text_input(
                 "Quick Search",
                 placeholder="Search keyword..."
             )
 
-        with filter_cols[1]:
+        with c2:
 
             column_filter = st.selectbox(
                 "Keyword Column",
-                options=keyword_df.columns.tolist()
+                keyword_df.columns.tolist()
             )
 
-        with filter_cols[2]:
+        with c3:
 
             row_limit = st.slider(
                 "Rows",
@@ -219,9 +247,9 @@ with main_tab1:
 
         filtered_df = filtered_df.head(row_limit)
 
-        # =================================================
-        # METRICS
-        # =================================================
+        # ==========================================
+        # METRIC
+        # ==========================================
 
         m1, m2, m3 = st.columns(3)
 
@@ -240,28 +268,26 @@ with main_tab1:
             filtered_df.nunique().max()
         )
 
-        # =================================================
-        # ENGINE
-        # =================================================
+        st.divider()
 
         render_keyword_engine(filtered_df)
 
     else:
 
-        st.info("Upload keyword CSV files.")
+        st.info("Upload one or multiple keyword CSV files.")
 
 # =========================================================
-# TAB 2 — ASIN ENGINE
+# PAGE : ASIN ENGINE
 # =========================================================
 
-with main_tab2:
+elif page == "ASIN Intelligence":
 
     render_asin_engine()
 
 # =========================================================
-# TAB 3 — RANKING ENGINE
+# PAGE : RANKING ENGINE
 # =========================================================
 
-with main_tab3:
+elif page == "Ranking Engine":
 
     render_ranking_engine()
