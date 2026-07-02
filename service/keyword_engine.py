@@ -1,7 +1,3 @@
-# =========================================================
-# service/keyword_engine.py
-# =========================================================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -29,11 +25,12 @@ def make_search_link(text):
 
     text = str(text)
 
-    return (
-        f'<a href="https://www.amazon.com/s?k='
-        f'{quote_plus(text)}" target="_blank">{text}</a>'
-    )
-
+    return f'''
+    <a href="https://www.amazon.com/s?k={quote_plus(text)}"
+       target="_blank">
+       {text}
+    </a>
+    '''
 
 def make_asin_link(asin):
 
@@ -42,14 +39,15 @@ def make_asin_link(asin):
 
     asin = str(asin)
 
-    return (
-        f'<a href="https://www.amazon.com/dp/'
-        f'{asin}" target="_blank">{asin}</a>'
-    )
-
+    return f'''
+    <a href="https://www.amazon.com/dp/{asin}"
+       target="_blank">
+       {asin}
+    </a>
+    '''
 
 # =========================================================
-# CLEAN TEXT
+# TEXT CLEANER
 # =========================================================
 
 def clean_text(text):
@@ -69,9 +67,8 @@ def clean_text(text):
 
     return text.strip()
 
-
 # =========================================================
-# NGRAM ENGINE
+# NGRAM EXTRACTOR
 # =========================================================
 
 @st.cache_data
@@ -109,10 +106,12 @@ def extract_ngrams(
             reverse=True
         )
 
-        return pd.DataFrame(
+        result_df = pd.DataFrame(
             words_freq[:top_n],
             columns=["Phrase", "Frequency"]
         )
+
+        return result_df
 
     except:
 
@@ -120,9 +119,8 @@ def extract_ngrams(
             columns=["Phrase", "Frequency"]
         )
 
-
 # =========================================================
-# KEYWORD DETECTION
+# SIGNAL DETECTOR
 # =========================================================
 
 def detect_keywords(df, keywords, label):
@@ -140,120 +138,137 @@ def detect_keywords(df, keywords, label):
                 rows.append({
 
                     "Phrase": row["Phrase"],
-
                     "Frequency": row["Frequency"],
-
                     "Signal": keyword,
-
                     "Category": label
                 })
 
     return pd.DataFrame(rows)
 
-
 # =========================================================
 # MAIN ENGINE
 # =========================================================
 
-def render_keyword_engine(final_df):
+def render_keyword_engine(df):
+
+    # =====================================================
+    # EMPTY CHECK
+    # =====================================================
+
+    if df is None or df.empty:
+
+        st.warning("No keyword dataset loaded.")
+
+        return
 
     # =====================================================
     # TITLE
     # =====================================================
 
-    st.markdown("# Keyword Intelligence Engine")
-
-    # =====================================================
-    # EMPTY STATE
-    # =====================================================
-
-    if final_df is None or final_df.empty:
-
-        st.info("No keyword dataset loaded.")
-        return
+    st.markdown("# Keyword Intelligence")
 
     # =====================================================
     # FILTERS
     # =====================================================
 
+    st.markdown("## Dataset Filters")
+
     col1, col2, col3 = st.columns(3)
+
+    filtered_df = df.copy()
+
+    # -----------------------------------------------------
+    # NICHE
+    # -----------------------------------------------------
 
     with col1:
 
-        niche_filter = st.multiselect(
-            "Niche",
-            options=sorted(
-                final_df["Niche"]
-                .dropna()
-                .unique()
+        if "Niche" in filtered_df.columns:
+
+            niche_filter = st.multiselect(
+
+                "Niche",
+
+                options=sorted(
+                    filtered_df["Niche"]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
             )
-            if "Niche" in final_df.columns
-            else []
-        )
+
+            if niche_filter:
+
+                filtered_df = filtered_df[
+                    filtered_df["Niche"].isin(
+                        niche_filter
+                    )
+                ]
+
+    # -----------------------------------------------------
+    # QUARTER
+    # -----------------------------------------------------
 
     with col2:
 
-        quarter_filter = st.multiselect(
-            "Quarter",
-            options=sorted(
-                final_df["Quarter"]
-                .dropna()
-                .unique()
+        if "Quarter" in filtered_df.columns:
+
+            quarter_filter = st.multiselect(
+
+                "Quarter",
+
+                options=sorted(
+                    filtered_df["Quarter"]
+                    .dropna()
+                    .unique()
+                )
             )
-            if "Quarter" in final_df.columns
-            else []
-        )
+
+            if quarter_filter:
+
+                filtered_df = filtered_df[
+                    filtered_df["Quarter"].isin(
+                        quarter_filter
+                    )
+                ]
+
+    # -----------------------------------------------------
+    # YEAR
+    # -----------------------------------------------------
 
     with col3:
 
-        year_filter = st.multiselect(
-            "Year",
-            options=sorted(
-                final_df["Year"]
-                .dropna()
-                .unique()
+        if "Year" in filtered_df.columns:
+
+            year_filter = st.multiselect(
+
+                "Year",
+
+                options=sorted(
+                    filtered_df["Year"]
+                    .dropna()
+                    .astype(str)
+                    .unique()
+                )
             )
-            if "Year" in final_df.columns
-            else []
-        )
 
-    # =====================================================
-    # FILTER DATAFRAME
-    # =====================================================
+            if year_filter:
 
-    filtered_df = final_df.copy()
-
-    if niche_filter:
-
-        filtered_df = filtered_df[
-            filtered_df["Niche"].isin(
-                niche_filter
-            )
-        ]
-
-    if quarter_filter:
-
-        filtered_df = filtered_df[
-            filtered_df["Quarter"].isin(
-                quarter_filter
-            )
-        ]
-
-    if year_filter:
-
-        filtered_df = filtered_df[
-            filtered_df["Year"].isin(
-                year_filter
-            )
-        ]
+                filtered_df = filtered_df[
+                    filtered_df["Year"].isin(
+                        year_filter
+                    )
+                ]
 
     # =====================================================
     # SEARCH
     # =====================================================
 
     search_value = st.text_input(
+
         "Quick Search",
-        placeholder="Search anything..."
+
+        placeholder="Search keyword, ASIN, category..."
     )
 
     if search_value:
@@ -277,8 +292,46 @@ def render_keyword_engine(final_df):
         ]
 
     # =====================================================
-    # BACKLINK COLUMNS
+    # METRICS
     # =====================================================
+
+    c1, c2, c3, c4 = st.columns(4)
+
+    c1.metric(
+        "Rows",
+        f"{len(filtered_df):,}"
+    )
+
+    c2.metric(
+        "Columns",
+        len(filtered_df.columns)
+    )
+
+    c3.metric(
+        "Unique Niches",
+        filtered_df["Niche"].nunique()
+        if "Niche" in filtered_df.columns
+        else 0
+    )
+
+    c4.metric(
+        "Unique Search Terms",
+        filtered_df["Search Term"].nunique()
+        if "Search Term" in filtered_df.columns
+        else 0
+    )
+
+    # =====================================================
+    # DISPLAY DATA
+    # =====================================================
+
+    st.markdown("## Amazon Research Data")
+
+    display_df = filtered_df.copy()
+
+    # -----------------------------------------------------
+    # BACKLINKS
+    # -----------------------------------------------------
 
     link_columns = [
 
@@ -302,78 +355,53 @@ def render_keyword_engine(final_df):
 
     for col in link_columns:
 
-        if col in filtered_df.columns:
+        if col in display_df.columns:
 
-            filtered_df[col] = filtered_df[col].apply(
+            display_df[col] = display_df[col].apply(
                 make_search_link
             )
 
     for col in asin_columns:
 
-        if col in filtered_df.columns:
+        if col in display_df.columns:
 
-            filtered_df[col] = filtered_df[col].apply(
+            display_df[col] = display_df[col].apply(
                 make_asin_link
             )
 
     # =====================================================
-    # METRICS
+    # GRID
     # =====================================================
 
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric(
-        "Rows",
-        f"{len(filtered_df):,}"
-    )
-
-    c2.metric(
-        "Columns",
-        len(filtered_df.columns)
-    )
-
-    c3.metric(
-        "Unique Niches",
-        filtered_df["Niche"].nunique()
-        if "Niche" in filtered_df.columns
-        else 0
-    )
-
-    # =====================================================
-    # RAW DATA
-    # =====================================================
-
-    st.markdown("## Amazon Research Data")
-
-    gb = GridOptionsBuilder.from_dataframe(
-        filtered_df
-    )
+    gb = GridOptionsBuilder.from_dataframe(display_df)
 
     gb.configure_default_column(
+
         sortable=True,
         filter=True,
         resizable=True,
         editable=False,
         floatingFilter=True,
-        wrapText=False,
-        autoHeight=False,
+
         minWidth=140,
         flex=1,
     )
 
-    first_col = filtered_df.columns[0]
+    first_col = display_df.columns[0]
 
     gb.configure_column(
+
         first_col,
+
         pinned="left",
         width=180
     )
 
-    # =====================================================
-    # AUTO WIDTH
-    # =====================================================
+    # -----------------------------------------------------
+    # WIDTH
+    # -----------------------------------------------------
 
-    for col in filtered_df.columns:
+    for col in display_df.columns:
 
         width = 160
 
@@ -392,16 +420,7 @@ def render_keyword_engine(final_df):
             width = 220
 
         elif "asin" in col_lower:
-            width = 140
-
-        elif "month" in col_lower:
-            width = 120
-
-        elif "quarter" in col_lower:
-            width = 120
-
-        elif "year" in col_lower:
-            width = 120
+            width = 160
 
         elif "date" in col_lower:
             width = 160
@@ -411,9 +430,9 @@ def render_keyword_engine(final_df):
             width=width
         )
 
-    # =====================================================
+    # -----------------------------------------------------
     # HTML RENDERER
-    # =====================================================
+    # -----------------------------------------------------
 
     cell_renderer = JsCode("""
 
@@ -436,61 +455,58 @@ def render_keyword_engine(final_df):
 
     for col in link_columns + asin_columns:
 
-        if col in filtered_df.columns:
+        if col in display_df.columns:
 
             gb.configure_column(
-                col,
-                cellRenderer=cell_renderer,
-            )
 
-    # =====================================================
-    # GRID OPTIONS
-    # =====================================================
+                col,
+
+                cellRenderer=cell_renderer
+            )
 
     grid_options = gb.build()
 
     grid_options["domLayout"] = "normal"
-
-    grid_options["autoSizeStrategy"] = {
-        "type": "fitCellContents"
-    }
-
-    grid_options["defaultColDef"] = {
-        "minWidth": 120,
-        "maxWidth": 650,
-        "resizable": True,
-    }
-
-    grid_options["suppressColumnVirtualisation"] = True
 
     grid_options["animateRows"] = True
 
     grid_options["rowHeight"] = 42
 
     # =====================================================
-    # GRID
+    # RENDER GRID
     # =====================================================
 
-    AgGrid(
+    try:
 
-        filtered_df,
+        AgGrid(
 
-        gridOptions=grid_options,
+            display_df,
 
-        theme="alpine-dark",
+            gridOptions=grid_options,
 
-        height=720,
+            theme="alpine-dark",
 
-        fit_columns_on_grid_load=True,
+            height=700,
 
-        update_mode=GridUpdateMode.NO_UPDATE,
+            fit_columns_on_grid_load=False,
 
-        allow_unsafe_jscode=True,
+            update_mode=GridUpdateMode.NO_UPDATE,
 
-        enable_enterprise_modules=True,
+            allow_unsafe_jscode=True,
 
-        reload_data=False,
-    )
+            enable_enterprise_modules=False,
+
+            reload_data=False,
+        )
+
+    except Exception as e:
+
+        st.error(f"AgGrid Error: {e}")
+
+        st.dataframe(
+            display_df,
+            use_container_width=True
+        )
 
     # =====================================================
     # NLP ENGINE
@@ -501,7 +517,7 @@ def render_keyword_engine(final_df):
     st.markdown("# NLP Market Intelligence Engine")
 
     # =====================================================
-    # NLP SOURCE COLUMN
+    # DETECT NLP COLUMN
     # =====================================================
 
     candidate_columns = [
@@ -524,34 +540,11 @@ def render_keyword_engine(final_df):
 
             break
 
-    # fallback
     if nlp_source_column is None:
 
-        text_scores = {}
+        st.warning("No NLP column detected.")
 
-        for col in filtered_df.columns:
-
-            try:
-
-                avg_length = (
-
-                    filtered_df[col]
-                    .astype(str)
-                    .str.len()
-                    .mean()
-                )
-
-                text_scores[col] = avg_length
-
-            except:
-                pass
-
-        if text_scores:
-
-            nlp_source_column = max(
-                text_scores,
-                key=text_scores.get
-            )
+        return
 
     # =====================================================
     # SETTINGS
@@ -636,20 +629,16 @@ def render_keyword_engine(final_df):
         "funeral",
         "grief",
         "memorial",
-        "rainbow bridge",
     ]
 
     commercial_keywords = [
 
         "gift",
-        "gifts",
         "buy",
         "best",
         "premium",
         "personalized",
         "custom",
-        "plaque",
-        "decor",
     ]
 
     product_keywords = [
@@ -660,14 +649,7 @@ def render_keyword_engine(final_df):
         "stone",
         "garden",
         "lantern",
-        "jewelry",
-        "plaque",
-        "card",
     ]
-
-    # =====================================================
-    # SIGNAL DATA
-    # =====================================================
 
     emotional_df = detect_keywords(
         trigram_df,
@@ -688,7 +670,7 @@ def render_keyword_engine(final_df):
     )
 
     # =====================================================
-    # CLUSTER ENGINE
+    # CLUSTERS
     # =====================================================
 
     cluster_definitions = {
@@ -697,7 +679,6 @@ def render_keyword_engine(final_df):
             "pet",
             "dog",
             "cat",
-            "rainbow bridge",
         ],
 
         "Personalized Memorial": [
@@ -711,12 +692,6 @@ def render_keyword_engine(final_df):
             "stone",
             "wind chime",
             "plaque",
-        ],
-
-        "Funeral Service": [
-            "funeral",
-            "guest book",
-            "cards",
         ],
     }
 
@@ -767,7 +742,9 @@ def render_keyword_engine(final_df):
                 "Cluster": cluster_name,
 
                 "Signals": ", ".join(
-                    list(set(matched_phrases))[:5]
+                    list(
+                        set(matched_phrases)
+                    )[:5]
                 ),
 
                 "Frequency": total_freq,
@@ -779,43 +756,36 @@ def render_keyword_engine(final_df):
 
     cluster_df = pd.DataFrame(cluster_rows)
 
-    if not cluster_df.empty:
-
-        cluster_df = cluster_df.sort_values(
-            by="Opportunity Score",
-            ascending=False
-        )
-
     # =====================================================
-    # STRATEGIC INSIGHTS
+    # METRICS
     # =====================================================
 
     st.markdown("## Strategic Market Intelligence")
 
-    metric1, metric2, metric3, metric4 = st.columns(4)
+    m1, m2, m3, m4 = st.columns(4)
 
-    metric1.metric(
+    m1.metric(
         "Single Words",
         len(single_word_df)
     )
 
-    metric2.metric(
+    m2.metric(
         "Bigram",
         len(bigram_df)
     )
 
-    metric3.metric(
+    m3.metric(
         "Trigram",
         len(trigram_df)
     )
 
-    metric4.metric(
+    m4.metric(
         "Keyword Clusters",
         len(cluster_df)
     )
 
     # =====================================================
-    # NLP TABS
+    # TABS
     # =====================================================
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -828,14 +798,10 @@ def render_keyword_engine(final_df):
     ])
 
     # =====================================================
-    # TAB 1
+    # SINGLE
     # =====================================================
 
     with tab1:
-
-        st.markdown(
-            "### Keyword Frequency Analysis"
-        )
 
         st.dataframe(
             single_word_df,
@@ -844,14 +810,10 @@ def render_keyword_engine(final_df):
         )
 
     # =====================================================
-    # TAB 2
+    # BIGRAM
     # =====================================================
 
     with tab2:
-
-        st.markdown(
-            "### Bigram Analysis"
-        )
 
         st.dataframe(
             bigram_df,
@@ -860,14 +822,10 @@ def render_keyword_engine(final_df):
         )
 
     # =====================================================
-    # TAB 3
+    # TRIGRAM
     # =====================================================
 
     with tab3:
-
-        st.markdown(
-            "### Trigram Analysis"
-        )
 
         st.dataframe(
             trigram_df,
@@ -876,14 +834,10 @@ def render_keyword_engine(final_df):
         )
 
     # =====================================================
-    # TAB 4
+    # CLUSTERS
     # =====================================================
 
     with tab4:
-
-        st.markdown(
-            "### Keyword Clustering"
-        )
 
         st.dataframe(
             cluster_df,
@@ -892,7 +846,7 @@ def render_keyword_engine(final_df):
         )
 
     # =====================================================
-    # TAB 5
+    # INSIGHTS
     # =====================================================
 
     with tab5:
@@ -908,7 +862,7 @@ def render_keyword_engine(final_df):
             st.dataframe(
                 emotional_df,
                 use_container_width=True,
-                height=350
+                height=300
             )
 
             st.markdown(
@@ -918,7 +872,7 @@ def render_keyword_engine(final_df):
             st.dataframe(
                 product_df,
                 use_container_width=True,
-                height=350
+                height=300
             )
 
         with c2:
@@ -930,5 +884,5 @@ def render_keyword_engine(final_df):
             st.dataframe(
                 commercial_df,
                 use_container_width=True,
-                height=350
+                height=300
             )
