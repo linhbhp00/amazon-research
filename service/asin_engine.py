@@ -1067,36 +1067,114 @@ def render_asin_engine(final_df):
             revenue_distribution
         )
 
-    # =====================================================
-    # COMPETITOR SUMMARY
-    # =====================================================
+    # =========================================================
+# CATEGORY MARKET SHARE BY GROUP BEFORE SALES
+# =========================================================
 
-    competitor_summary = (
+st.markdown("---")
+st.markdown("## Category Market Share Intelligence")
+
+possible_category_cols = [
+    "Category",
+    "Categories",
+    "Main Category",
+    "Product Category",
+]
+
+category_col = None
+
+for col in possible_category_cols:
+
+    if col in filtered_df.columns:
+
+        category_col = col
+        break
+
+# =====================================================
+# CATEGORY ANALYSIS
+# =====================================================
+
+if category_col:
+
+    available_groups = sorted(
         filtered_df["Group Before Sales"]
-        .value_counts()
+        .dropna()
+        .astype(str)
+        .unique()
+    )
+
+    selected_group = st.selectbox(
+        "Select Group Before Sales",
+        options=available_groups
+    )
+
+    group_df = filtered_df[
+        filtered_df["Group Before Sales"]
+        .astype(str)
+        == selected_group
+    ]
+
+    # =================================================
+    # CATEGORY SHARE
+    # =================================================
+
+    category_share_df = (
+        group_df[category_col]
+        .fillna("Unknown")
+        .astype(str)
+        .value_counts(normalize=True)
+        .mul(100)
+        .round(1)
         .reset_index()
     )
 
-    competitor_summary.columns = [
-        "Group",
-        "Count"
+    category_share_df.columns = [
+        "Category",
+        "Market Share %"
     ]
 
-    # =====================================================
-    # INSIGHT CARDS
-    # =====================================================
+    # =================================================
+    # DATAFRAME
+    # =================================================
 
-    for _, row in competitor_summary.iterrows():
+    st.dataframe(
+        category_share_df,
+        use_container_width=True,
+        height=320
+    )
 
-        group_name = row["Group"]
+    # =================================================
+    # BAR CHART
+    # =================================================
 
-        count = row["Count"]
+    chart_df = (
+        category_share_df
+        .set_index("Category")
+    )
+
+    st.bar_chart(
+        chart_df
+    )
+
+    # =================================================
+    # TOP CATEGORY
+    # =================================================
+
+    if not category_share_df.empty:
+
+        top_category = (
+            category_share_df.iloc[0]["Category"]
+        )
+
+        top_share = (
+            category_share_df.iloc[0]["Market Share %"]
+        )
 
         st.markdown(
             f"""
             <div style="
                 padding:18px;
-                margin-bottom:12px;
+                margin-top:14px;
                 border-radius:14px;
                 background:#0b1220;
                 border:1px solid #1f2937;
@@ -1106,19 +1184,209 @@ def render_asin_engine(final_df):
                 font-size:18px;
                 font-weight:700;
                 color:#f8fafc;
-                margin-bottom:6px;
+                margin-bottom:10px;
             ">
-                {group_name}
+                Category Intelligence
             </div>
 
             <div style="
-                font-size:14px;
-                color:#93c5fd;
-                margin-bottom:10px;
+                font-size:15px;
+                color:#cbd5e1;
+                line-height:1.8;
             ">
-                {count} ASINs detected
+
+                <b>{top_category}</b>
+                dominates this competitor structure with
+                <b>{top_share}% market share</b>.
+
+                <br><br>
+
+                This indicates where most competitors
+                are focusing inventory, traffic,
+                and revenue concentration.
+
+                <br><br>
+
+                Recommended next step:
+                analyze saturation,
+                pricing strategy,
+                review velocity,
+                and sub-niche opportunities
+                inside this category.
+
             </div>
 
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+else:
+
+    st.info(
+        "No category column detected."
+    )
+    
+    # =====================================================
+    # COMPETITOR SUMMARY
+    # =====================================================
+
+    st.markdown("## Competitor Opportunity Intelligence")
+
+    competitor_summary = (
+
+        filtered_df
+        .groupby("Group Before Sales")
+        .agg({
+    
+            "ASIN": "count",
+    
+            "ASIN Revenue": "sum",
+    
+            "ASIN Sales": "sum",
+    
+            "Strategy": lambda x:
+            x.mode().iloc[0]
+            if not x.mode().empty
+            else "Research"
+    
+        })
+        .reset_index()
+    
+    )
+    
+    competitor_summary.columns = [
+    
+        "Competitor Group",
+    
+        "Total ASINs",
+    
+        "Total Revenue",
+    
+        "Total Sales",
+    
+        "Strategy"
+    
+    ]
+    
+    # =====================================================
+    # FORMAT
+    # =====================================================
+    
+    competitor_summary["Total Revenue"] = (
+        competitor_summary["Total Revenue"]
+        .fillna(0)
+        .astype(float)
+        .round(0)
+    )
+    
+    competitor_summary["Total Sales"] = (
+        competitor_summary["Total Sales"]
+        .fillna(0)
+        .astype(int)
+    )
+    
+    # =====================================================
+    # TABLE
+    # =====================================================
+    
+    st.dataframe(
+        competitor_summary,
+        use_container_width=True,
+        height=420
+    )
+    
+    # =====================================================
+    # STRATEGY CARDS
+    # =====================================================
+    
+    st.markdown("### Market Strategy Signals")
+    
+    for _, row in competitor_summary.iterrows():
+    
+        group_name = row["Competitor Group"]
+    
+        total_asins = row["Total ASINs"]
+    
+        strategy = row["Strategy"]
+    
+        revenue = int(row["Total Revenue"])
+    
+        sales = int(row["Total Sales"])
+    
+        # ================================================
+        # COLOR
+        # ================================================
+    
+        strategy_lower = strategy.lower()
+    
+        if "avoid" in strategy_lower:
+    
+            bg_color = "#3b0d0d"
+            border_color = "#ef4444"
+    
+        elif "follow" in strategy_lower:
+    
+            bg_color = "#0f172a"
+            border_color = "#3b82f6"
+    
+        elif "scale" in strategy_lower:
+    
+            bg_color = "#052e16"
+            border_color = "#22c55e"
+    
+        else:
+    
+            bg_color = "#1e293b"
+            border_color = "#64748b"
+    
+        # ================================================
+        # CARD
+        # ================================================
+    
+        st.markdown(
+            f"""
+            <div style="
+                padding:18px;
+                margin-bottom:14px;
+                border-radius:14px;
+                background:{bg_color};
+                border-left:6px solid {border_color};
+            ">
+    
+            <div style="
+                font-size:20px;
+                font-weight:700;
+                color:white;
+                margin-bottom:10px;
+            ">
+                {group_name}
+            </div>
+    
+            <div style="
+                color:#cbd5e1;
+                line-height:1.8;
+                font-size:15px;
+            ">
+    
+                <b>{total_asins}</b> ASINs detected
+                <br>
+    
+                Total Revenue:
+                <b>${revenue:,}</b>
+    
+                <br>
+    
+                Total Sales:
+                <b>{sales:,}</b>
+    
+                <br><br>
+    
+                <b>Strategy:</b>
+                {strategy}
+    
+            </div>
+    
             </div>
             """,
             unsafe_allow_html=True
