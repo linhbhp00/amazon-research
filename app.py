@@ -87,14 +87,20 @@ if "keyword_file_names" not in st.session_state:
 
 st.sidebar.title("MRnD")
 
-st.sidebar.markdown("### Amazon Research Framework")
+st.sidebar.markdown(
+    "### Amazon Research Framework"
+)
 
 # =========================================================
 # SIDEBAR MENU
 # =========================================================
 
 st.sidebar.markdown(
-    '<div class="sidebar-menu-title">Research Modules</div>',
+    """
+    <div class="sidebar-menu-title">
+        Research Modules
+    </div>
+    """,
     unsafe_allow_html=True
 )
 
@@ -122,10 +128,26 @@ uploaded_files = st.sidebar.file_uploader(
 )
 
 # =========================================================
-# PROCESS CSV
+# PROCESS CSV ONLY WHEN NEW FILE UPLOADED
 # =========================================================
 
+current_uploaded_names = []
+
 if uploaded_files:
+
+    current_uploaded_names = [
+        f.name for f in uploaded_files
+    ]
+
+# ---------------------------------------------------------
+# ONLY PROCESS WHEN FILE CHANGED
+# ---------------------------------------------------------
+
+if (
+    uploaded_files
+    and current_uploaded_names
+    != st.session_state.keyword_file_names
+):
 
     all_data = []
 
@@ -136,9 +158,11 @@ if uploaded_files:
             raw_df = read_csv_safe(uploaded_file)
 
             if raw_df is None:
+
                 st.warning(
                     f"Cannot read file: {uploaded_file.name}"
                 )
+
                 continue
 
             # ==========================================
@@ -245,9 +269,9 @@ if uploaded_files:
 
         st.session_state.keyword_df = final_df
 
-        st.session_state.keyword_file_names = [
-            f.name for f in uploaded_files
-        ]
+        st.session_state.keyword_file_names = (
+            current_uploaded_names
+        )
 
 # =========================================================
 # MAIN TITLE
@@ -274,7 +298,9 @@ final_df = st.session_state.keyword_df
 
 if st.session_state.keyword_file_names:
 
-    st.sidebar.success("Keyword Dataset Loaded")
+    st.sidebar.success(
+        "Keyword Dataset Loaded"
+    )
 
     for file_name in st.session_state.keyword_file_names:
 
@@ -282,9 +308,12 @@ if st.session_state.keyword_file_names:
 
     st.sidebar.markdown("---")
 
-    if st.sidebar.button("Clear Keyword Dataset"):
+    if st.sidebar.button(
+        "Clear Keyword Dataset"
+    ):
 
         st.session_state.keyword_df = None
+
         st.session_state.keyword_file_names = []
 
         st.rerun()
@@ -295,7 +324,10 @@ if st.session_state.keyword_file_names:
 
 if final_df is None:
 
-    st.info("Upload keyword CSV files to begin.")
+    st.info(
+        "Upload keyword CSV files to begin."
+    )
+
     st.stop()
 
 # =========================================================
