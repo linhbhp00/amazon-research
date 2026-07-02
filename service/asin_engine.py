@@ -1001,7 +1001,7 @@ def render_asin_engine(final_df):
     # =====================================================
 
     competitor_summary = (
-        filtered_df["Competitor Group"]
+        filtered_df["Competitor Group Before Sales"]
         .value_counts()
         .reset_index()
     )
