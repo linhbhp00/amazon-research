@@ -106,9 +106,11 @@ def render_asin_engine():
 
         uploaded_file.seek(0)
 
-        df = pd.read_csv(
-            uploaded_file,
-            encoding="latin1"
+        df = read_csv_safe(uploaded_file)
+
+        if df.empty:
+            st.error("Cannot read CSV")
+            return
         )
 
     # =====================================================
