@@ -10,21 +10,189 @@ from st_aggrid import (
     AgGrid,
     GridOptionsBuilder,
     GridUpdateMode,
+    JsCode,
 )
 
 from utils.csv_utils import read_csv_safe
 
+# =========================================================
+# HELPERS
+# =========================================================
+
+def classify_keyword(row):
+
+    try:
+
+        search_volume = float(
+            row.get("Search Volume", 0)
+        )
+
+        iq_score = float(
+            row.get("Cerebro IQ Score", 0)
+        )
+
+        cpc = float(
+            row.get("H10 PPC Sugg. Bid", 0)
+        )
+
+        competing = float(
+            row.get("Competing Products", 0)
+        )
+
+        trend = float(
+            row.get("Search Volume Trend", 0)
+        )
+
+        # =============================================
+        # EASY WIN
+        # =============================================
+
+        if (
+            search_volume >= 3000
+            and iq_score >= 1000
+            and cpc <= 1.5
+            and competing <= 5000
+        ):
+
+            return "Easy Win"
+
+        # =============================================
+        # BUILD RANK
+        # =============================================
+
+        elif (
+            search_volume >= 5000
+            and trend > 0
+            and iq_score >= 700
+        ):
+
+            return "Build Rank"
+
+        # =============================================
+        # HIGH COMPETITION
+        # =============================================
+
+        elif (
+            competing >= 20000
+            or cpc >= 3
+        ):
+
+            return "High Competition"
+
+        # =============================================
+        # TRENDING
+        # =============================================
+
+        elif trend >= 15:
+
+            return "Trending"
+
+        return "Mid Opportunity"
+
+    except:
+
+        return "Unknown"
+
+
+def score_keyword(row):
+
+    try:
+
+        sv = float(
+            row.get("Search Volume", 0)
+        )
+
+        iq = float(
+            row.get("Cerebro IQ Score", 0)
+        )
+
+        cpc = float(
+            row.get("H10 PPC Sugg. Bid", 0)
+        )
+
+        comp = float(
+            row.get("Competing Products", 0)
+        )
+
+        trend = float(
+            row.get("Search Volume Trend", 0)
+        )
+
+        score = (
+            (sv * 0.30)
+            + (iq * 0.35)
+            + (trend * 0.20)
+            - (cpc * 200)
+            - (comp * 0.01)
+        )
+
+        return round(score, 2)
+
+    except:
+
+        return 0
+
+
+def detect_product_type(keyword):
+
+    keyword = str(keyword).lower()
+
+    product_map = {
+
+        "Blanket": [
+            "blanket"
+        ],
+
+        "Mug": [
+            "mug",
+            "cup",
+        ],
+
+        "Shirt": [
+            "shirt",
+            "hoodie",
+            "sweatshirt",
+        ],
+
+        "Jewelry": [
+            "necklace",
+            "bracelet",
+            "ring",
+        ],
+
+        "Memorial": [
+            "memorial",
+            "sympathy",
+            "funeral",
+        ],
+
+        "Pet": [
+            "dog",
+            "cat",
+            "pet",
+        ]
+    }
+
+    for product, words in product_map.items():
+
+        for word in words:
+
+            if word in keyword:
+                return product
+
+    return "General"
+
 
 # =========================================================
-# MAIN FUNCTION
+# MAIN ENGINE
 # =========================================================
 
 def render_ranking_engine():
 
-    st.markdown("# Ranking Opportunity Engine")
+    st.markdown("# Ranking Engine")
 
     # =====================================================
-    # SESSION STATE
+    # SESSION
     # =====================================================
 
     if "ranking_df" not in st.session_state:
@@ -34,14 +202,17 @@ def render_ranking_engine():
         st.session_state.ranking_file_names = []
 
     # =====================================================
-    # UPLOADER
+    # SIDEBAR
     # =====================================================
 
-    uploaded_files = st.file_uploader(
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Ranking Engine")
+
+    uploaded_files = st.sidebar.file_uploader(
         "Upload Ranking CSV",
         type=["csv"],
         accept_multiple_files=True,
-        key="ranking_uploader"
+        key="ranking_csv"
     )
 
     # =====================================================
@@ -59,35 +230,50 @@ def render_ranking_engine():
                 df = read_csv_safe(uploaded_file)
 
                 if df is None:
-                    st.warning(f"Cannot read file: {uploaded_file.name}")
+
+                    st.warning(
+                        f"Cannot read {uploaded_file.name}"
+                    )
+
                     continue
 
-                # =================================================
+                # =========================================
                 # FIX HEADER
-                # =================================================
+                # =========================================
+
+                if df.columns.tolist()[0] == 0:
+
+                    header_row = df.iloc[0]
+
+                    df = df[1:].copy()
+
+                    df.columns = header_row
+
+                df = df.reset_index(drop=True)
+
+                # =========================================
+                # CLEAN COLUMN NAMES
+                # =========================================
 
                 df.columns = [
                     str(col).strip()
                     for col in df.columns
                 ]
 
-                # =================================================
-                # CLEAN NUMERIC COLUMNS
-                # =================================================
+                # =========================================
+                # NUMERIC CONVERSION
+                # =========================================
 
                 numeric_cols = [
-                    "ABA Total Click Share",
-                    "ABA Total Conv. Share",
-                    "Keyword Sales",
-                    "Cerebro IQ Score",
+
                     "Search Volume",
                     "Search Volume Trend",
+                    "Cerebro IQ Score",
                     "H10 PPC Sugg. Bid",
-                    "H10 PPC Sugg. Min Bid",
-                    "H10 PPC Sugg. Max Bid",
                     "Competing Products",
                     "CPR",
                     "Title Density",
+                    "Keyword Sales",
                     "Organic Rank",
                     "Sponsored Rank",
                 ]
@@ -96,228 +282,62 @@ def render_ranking_engine():
 
                     if col in df.columns:
 
-                        df[col] = (
+                        df[col] = pd.to_numeric(
                             df[col]
                             .astype(str)
-                            .str.replace(",", "", regex=False)
-                            .str.replace("%", "", regex=False)
-                        )
-
-                        df[col] = pd.to_numeric(
-                            df[col],
+                            .str.replace(",", ""),
                             errors="coerce"
                         )
 
-                # =================================================
-                # PRODUCT TYPE DETECTION
-                # =================================================
-
-                def detect_product_type(keyword):
-
-                    keyword = str(keyword).lower()
-
-                    mapping = {
-                        "blanket": "Blanket",
-                        "mug": "Mug",
-                        "pillow": "Pillow",
-                        "shirt": "Shirt",
-                        "hoodie": "Hoodie",
-                        "canvas": "Canvas",
-                        "poster": "Poster",
-                        "necklace": "Jewelry",
-                        "bracelet": "Jewelry",
-                        "plaque": "Plaque",
-                        "frame": "Frame",
-                        "ornament": "Ornament",
-                        "tumbler": "Tumbler",
-                        "ring": "Jewelry",
-                        "keychain": "Keychain",
-                        "wind chime": "Wind Chime",
-                    }
-
-                    for key, value in mapping.items():
-
-                        if key in keyword:
-                            return value
-
-                    return "Other"
-
-                # =================================================
-                # DEMAND LEVEL
-                # =================================================
-
-                def classify_demand(volume):
-
-                    if pd.isna(volume):
-                        return "Low"
-
-                    if volume >= 50000:
-                        return "Extreme"
-
-                    elif volume >= 20000:
-                        return "High"
-
-                    elif volume >= 5000:
-                        return "Medium"
-
-                    return "Low"
-
-                # =================================================
-                # COMPETITION LEVEL
-                # =================================================
-
-                def classify_competition(row):
-
-                    comp = row.get(
-                        "Competing Products",
-                        0
-                    )
-
-                    title_density = row.get(
-                        "Title Density",
-                        0
-                    )
-
-                    if comp >= 100000 or title_density >= 50:
-                        return "Extreme"
-
-                    elif comp >= 30000 or title_density >= 20:
-                        return "High"
-
-                    elif comp >= 10000:
-                        return "Medium"
-
-                    return "Low"
-
-                # =================================================
-                # OPPORTUNITY SCORE
-                # =================================================
-
-                def calculate_opportunity(row):
-
-                    score = 0
-
-                    sv = row.get("Search Volume", 0)
-                    iq = row.get("Cerebro IQ Score", 0)
-                    trend = row.get("Search Volume Trend", 0)
-                    cpr = row.get("CPR", 999)
-                    comp = row.get("Competing Products", 999999)
-
-                    # Demand
-                    if sv >= 50000:
-                        score += 35
-                    elif sv >= 20000:
-                        score += 25
-                    elif sv >= 5000:
-                        score += 15
-
-                    # IQ
-                    if iq >= 1000:
-                        score += 25
-                    elif iq >= 500:
-                        score += 15
-
-                    # Trend
-                    if trend >= 20:
-                        score += 15
-                    elif trend >= 10:
-                        score += 10
-
-                    # CPR
-                    if cpr <= 10:
-                        score += 15
-                    elif cpr <= 30:
-                        score += 10
-
-                    # Competition
-                    if comp <= 10000:
-                        score += 15
-                    elif comp <= 50000:
-                        score += 8
-
-                    return min(score, 100)
-
-                # =================================================
-                # APPLY ENGINE
-                # =================================================
+                # =========================================
+                # PRODUCT TYPE
+                # =========================================
 
                 if "Keyword Phrase" in df.columns:
 
-                    df["Product Type"] = df[
-                        "Keyword Phrase"
-                    ].apply(detect_product_type)
+                    df["Product Type"] = (
+                        df["Keyword Phrase"]
+                        .apply(detect_product_type)
+                    )
 
                 else:
 
-                    df["Product Type"] = "Other"
+                    df["Product Type"] = "General"
 
-                df["Demand Level"] = df[
-                    "Search Volume"
-                ].apply(classify_demand)
+                # =========================================
+                # OPPORTUNITY SCORE
+                # =========================================
 
-                df["Competition Level"] = df.apply(
-                    classify_competition,
-                    axis=1
+                df["Opportunity Score"] = (
+                    df.apply(
+                        score_keyword,
+                        axis=1
+                    )
                 )
 
-                df["Opportunity Score"] = df.apply(
-                    calculate_opportunity,
-                    axis=1
+                # =========================================
+                # KEYWORD TYPE
+                # =========================================
+
+                df["Keyword Classification"] = (
+                    df.apply(
+                        classify_keyword,
+                        axis=1
+                    )
                 )
-
-                # =================================================
-                # BUILD RANK DECISION
-                # =================================================
-
-                def build_rank_decision(row):
-
-                    score = row["Opportunity Score"]
-
-                    if score >= 75:
-                        return "Build Rank Aggressively"
-
-                    elif score >= 55:
-                        return "Good Ranking Opportunity"
-
-                    elif score >= 35:
-                        return "Moderate Competition"
-
-                    return "Hard To Rank"
-
-                df["Ranking Decision"] = df.apply(
-                    build_rank_decision,
-                    axis=1
-                )
-
-                # =================================================
-                # PRIORITY COLOR
-                # =================================================
-
-                def priority_color(score):
-
-                    if score >= 75:
-                        return "🟢"
-
-                    elif score >= 55:
-                        return "🟡"
-
-                    return "🔴"
-
-                df["Priority"] = df[
-                    "Opportunity Score"
-                ].apply(priority_color)
 
                 all_data.append(df)
 
             except Exception as e:
 
                 st.error(
-                    f"Error processing {uploaded_file.name}: {e}"
+                    f"Error processing "
+                    f"{uploaded_file.name}: {e}"
                 )
 
-        # =====================================================
+        # =============================================
         # SAVE SESSION
-        # =====================================================
+        # =============================================
 
         if all_data:
 
@@ -344,17 +364,23 @@ def render_ranking_engine():
 
     if st.session_state.ranking_file_names:
 
-        st.success("Ranking Dataset Loaded")
+        st.sidebar.success(
+            "Ranking Dataset Loaded"
+        )
 
-        for file_name in st.session_state.ranking_file_names:
-            st.caption(f"• {file_name}")
+        for file_name in (
+            st.session_state
+            .ranking_file_names
+        ):
 
-        if st.button(
-            "Clear Ranking Dataset",
-            key="clear_ranking"
+            st.sidebar.caption(f"• {file_name}")
+
+        if st.sidebar.button(
+            "Clear Ranking Dataset"
         ):
 
             st.session_state.ranking_df = None
+
             st.session_state.ranking_file_names = []
 
             st.rerun()
@@ -365,7 +391,10 @@ def render_ranking_engine():
 
     if final_df is None or final_df.empty:
 
-        st.info("Upload ranking CSV to begin.")
+        st.info(
+            "Upload Ranking CSV files."
+        )
+
         return
 
     # =====================================================
@@ -376,10 +405,12 @@ def render_ranking_engine():
 
     with c1:
 
-        demand_filter = st.multiselect(
-            "Demand Level",
-            sorted(
-                final_df["Demand Level"]
+        classification_filter = st.multiselect(
+            "Keyword Classification",
+            options=sorted(
+                final_df[
+                    "Keyword Classification"
+                ]
                 .dropna()
                 .unique()
             )
@@ -387,10 +418,12 @@ def render_ranking_engine():
 
     with c2:
 
-        competition_filter = st.multiselect(
-            "Competition Level",
-            sorted(
-                final_df["Competition Level"]
+        product_filter = st.multiselect(
+            "Product Type",
+            options=sorted(
+                final_df[
+                    "Product Type"
+                ]
                 .dropna()
                 .unique()
             )
@@ -398,13 +431,9 @@ def render_ranking_engine():
 
     with c3:
 
-        product_filter = st.multiselect(
-            "Product Type",
-            sorted(
-                final_df["Product Type"]
-                .dropna()
-                .unique()
-            )
+        search_value = st.text_input(
+            "Quick Search",
+            placeholder="Search keyword..."
         )
 
     # =====================================================
@@ -413,48 +442,36 @@ def render_ranking_engine():
 
     filtered_df = final_df.copy()
 
-    if demand_filter:
+    if classification_filter:
 
         filtered_df = filtered_df[
-            filtered_df["Demand Level"].isin(
-                demand_filter
-            )
-        ]
-
-    if competition_filter:
-
-        filtered_df = filtered_df[
-            filtered_df["Competition Level"].isin(
-                competition_filter
-            )
+            filtered_df[
+                "Keyword Classification"
+            ]
+            .isin(classification_filter)
         ]
 
     if product_filter:
 
         filtered_df = filtered_df[
-            filtered_df["Product Type"].isin(
-                product_filter
-            )
+            filtered_df[
+                "Product Type"
+            ]
+            .isin(product_filter)
         ]
 
-    # =====================================================
-    # SEARCH
-    # =====================================================
-
-    search = st.text_input(
-        "Search Keyword",
-        placeholder="Search keyword..."
-    )
-
-    if search and "Keyword Phrase" in filtered_df.columns:
+    if search_value:
 
         filtered_df = filtered_df[
-            filtered_df["Keyword Phrase"]
-            .astype(str)
-            .str.contains(
-                search,
-                case=False,
-                na=False
+            filtered_df.astype(str)
+            .apply(
+                lambda row:
+                row.str.contains(
+                    search_value,
+                    case=False,
+                    na=False
+                ).any(),
+                axis=1
             )
         ]
 
@@ -466,28 +483,38 @@ def render_ranking_engine():
 
     m1.metric(
         "Keywords",
-        len(filtered_df)
+        f"{len(filtered_df):,}"
     )
 
     m2.metric(
-        "Avg Search Volume",
-        f"{int(filtered_df['Search Volume'].mean()):,}"
-        if "Search Volume" in filtered_df.columns
-        else 0
+        "Easy Win",
+        len(
+            filtered_df[
+                filtered_df[
+                    "Keyword Classification"
+                ] == "Easy Win"
+            ]
+        )
     )
 
     m3.metric(
-        "Avg IQ Score",
-        f"{int(filtered_df['Cerebro IQ Score'].mean())}"
-        if "Cerebro IQ Score" in filtered_df.columns
-        else 0
+        "Build Rank",
+        len(
+            filtered_df[
+                filtered_df[
+                    "Keyword Classification"
+                ] == "Build Rank"
+            ]
+        )
     )
 
     m4.metric(
-        "High Opportunity KW",
+        "High Competition",
         len(
             filtered_df[
-                filtered_df["Opportunity Score"] >= 75
+                filtered_df[
+                    "Keyword Classification"
+                ] == "High Competition"
             ]
         )
     )
@@ -496,81 +523,84 @@ def render_ranking_engine():
     # INSIGHTS
     # =====================================================
 
-    st.markdown("## Ranking Insights")
+    st.markdown(
+        "## Keyword Opportunity Insights"
+    )
 
-    high_opportunity = filtered_df[
-        filtered_df["Opportunity Score"] >= 75
+    insight_df = (
+        filtered_df
+        .groupby(
+            [
+                "Keyword Classification",
+                "Product Type"
+            ]
+        )
+        .agg({
+
+            "Keyword Phrase": "count",
+            "Opportunity Score": "mean",
+            "Search Volume": "mean",
+            "H10 PPC Sugg. Bid": "mean",
+        })
+        .reset_index()
+    )
+
+    insight_df.columns = [
+
+        "Classification",
+        "Product Type",
+        "Keyword Count",
+        "Avg Opportunity Score",
+        "Avg Search Volume",
+        "Avg CPC",
     ]
 
-    hard_keywords = filtered_df[
-        filtered_df["Opportunity Score"] < 35
-    ]
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-
-        st.markdown("### 🟢 Best Keywords To Rank")
-
-        if not high_opportunity.empty:
-
-            display_cols = [
-                col for col in [
-                    "Keyword Phrase",
-                    "Search Volume",
-                    "Cerebro IQ Score",
-                    "Competing Products",
-                    "Opportunity Score",
-                    "Ranking Decision"
-                ]
-                if col in high_opportunity.columns
-            ]
-
-            st.dataframe(
-                high_opportunity[
-                    display_cols
-                ].sort_values(
-                    by="Opportunity Score",
-                    ascending=False
-                ),
-                use_container_width=True,
-                height=400
-            )
-
-    with col2:
-
-        st.markdown("### 🔴 Hard Keywords")
-
-        if not hard_keywords.empty:
-
-            display_cols = [
-                col for col in [
-                    "Keyword Phrase",
-                    "Search Volume",
-                    "Competing Products",
-                    "Title Density",
-                    "Opportunity Score",
-                    "Ranking Decision"
-                ]
-                if col in hard_keywords.columns
-            ]
-
-            st.dataframe(
-                hard_keywords[
-                    display_cols
-                ].sort_values(
-                    by="Competing Products",
-                    ascending=False
-                ),
-                use_container_width=True,
-                height=400
-            )
+    st.dataframe(
+        insight_df,
+        use_container_width=True
+    )
 
     # =====================================================
-    # FULL DATA
+    # TOP KEYWORDS
     # =====================================================
 
-    st.markdown("## Full Ranking Dataset")
+    st.markdown(
+        "## Top Opportunity Keywords"
+    )
+
+    top_keywords = (
+        filtered_df
+        .sort_values(
+            by="Opportunity Score",
+            ascending=False
+        )
+        .head(50)
+    )
+
+    st.dataframe(
+        top_keywords[
+            [
+                "Keyword Phrase",
+                "Keyword Classification",
+                "Product Type",
+                "Search Volume",
+                "Cerebro IQ Score",
+                "H10 PPC Sugg. Bid",
+                "Competing Products",
+                "Opportunity Score",
+            ]
+        ],
+        use_container_width=True,
+        height=400
+    )
+
+    # =====================================================
+    # AGGRID
+    # =====================================================
+
+    st.markdown(
+        "## Ranking Intelligence Dashboard"
+    )
 
     gb = GridOptionsBuilder.from_dataframe(
         filtered_df
@@ -581,8 +611,83 @@ def render_ranking_engine():
         filter=True,
         resizable=True,
         floatingFilter=True,
-        minWidth=120
+        minWidth=140
     )
+
+    # =====================================================
+    # COLOR RULES
+    # =====================================================
+
+    classification_style = JsCode("""
+    function(params) {
+
+        if (
+            params.value == 'Easy Win'
+        ) {
+
+            return {
+                'backgroundColor': '#14532d',
+                'color': 'white'
+            }
+        }
+
+        if (
+            params.value == 'Build Rank'
+        ) {
+
+            return {
+                'backgroundColor': '#1d4ed8',
+                'color': 'white'
+            }
+        }
+
+        if (
+            params.value == 'Trending'
+        ) {
+
+            return {
+                'backgroundColor': '#7c3aed',
+                'color': 'white'
+            }
+        }
+
+        if (
+            params.value == 'High Competition'
+        ) {
+
+            return {
+                'backgroundColor': '#7f1d1d',
+                'color': 'white'
+            }
+        }
+
+        return {
+            'backgroundColor': '#374151',
+            'color': 'white'
+        }
+    }
+    """)
+
+    gb.configure_column(
+        "Keyword Classification",
+        cellStyle=classification_style,
+        width=180
+    )
+
+    gb.configure_column(
+        "Keyword Phrase",
+        pinned="left",
+        width=320
+    )
+
+    gb.configure_column(
+        "Opportunity Score",
+        width=180
+    )
+
+    # =====================================================
+    # BUILD GRID
+    # =====================================================
 
     grid_options = gb.build()
 
@@ -590,8 +695,8 @@ def render_ranking_engine():
         filtered_df,
         gridOptions=grid_options,
         theme="alpine-dark",
-        height=700,
-        fit_columns_on_grid_load=True,
-        update_mode=GridUpdateMode.NO_UPDATE,
+        height=720,
+        allow_unsafe_jscode=True,
         enable_enterprise_modules=True,
+        update_mode=GridUpdateMode.NO_UPDATE
     )
