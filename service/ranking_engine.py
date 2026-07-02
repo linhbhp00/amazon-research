@@ -240,7 +240,11 @@ def render_ranking_engine():
 
     try:
 
-        df = pd.read_csv(uploaded_file)
+        df = read_csv_safe(uploaded_file)
+
+        if df.empty:
+            st.error("Cannot read CSV")
+            return
 
     except:
 
