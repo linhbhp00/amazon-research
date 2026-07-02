@@ -14,7 +14,7 @@ from st_aggrid import (
 )
 
 # =========================================================
-# HEADER VALIDATION
+# HEADER FIX
 # =========================================================
 
 EXPECTED_KEYWORD_COLUMNS = [
@@ -26,13 +26,7 @@ EXPECTED_KEYWORD_COLUMNS = [
 
 def is_valid_keyword_header(columns):
     cols = [str(c).strip() for c in columns]
-    score = 0
-
-    for expected in EXPECTED_KEYWORD_COLUMNS:
-        if expected in cols:
-            score += 1
-
-    return score >= 2
+    return sum(c in cols for c in EXPECTED_KEYWORD_COLUMNS) >= 2
 
 
 def auto_fix_keyword_headers(df):
@@ -61,7 +55,65 @@ def auto_fix_keyword_headers(df):
 
 
 # =========================================================
-# TEXT CLEANING
+# MULTI-FILE NORMALIZER (CRITICAL FIX)
+# =========================================================
+
+def normalize_multi_file(df):
+    df = df.copy()
+
+    if "Search Term" not in df.columns:
+        return df
+
+    def normalize(x):
+        if pd.isna(x):
+            return ""
+
+        x = str(x)
+        x = x.replace("[", "").replace("]", "")
+        x = x.replace('"', "").replace("'", "")
+        return x.strip().lower()
+
+    df["Search Term"] = df["Search Term"].apply(normalize)
+
+    return df
+
+
+# =========================================================
+# NICHE ENGINE
+# =========================================================
+
+def assign_niche(df):
+    df = df.copy()
+
+    if "Search Term" not in df.columns:
+        return df
+
+    def infer(text):
+        text = str(text).lower()
+        tokens = re.findall(r"[a-zA-Z]+", text)
+
+        if not tokens:
+            return "unknown"
+
+        return tokens[0]
+
+    df["Niche"] = df["Search Term"].apply(infer)
+
+    return df
+
+
+# =========================================================
+# QUARTER
+# =========================================================
+
+def convert_quarter(month):
+    if pd.isna(month):
+        return None
+    return f"Q{((int(month) - 1) // 3) + 1}"
+
+
+# =========================================================
+# TEXT CLEAN
 # =========================================================
 
 def clean_text(text):
@@ -86,9 +138,7 @@ def make_search_link(text):
         return text
 
     return f"""
-    <a href="https://www.amazon.com/s?k={quote_plus(str(text))}" target="_blank">
-        {text}
-    </a>
+    <a href="https://www.amazon.com/s?k={quote_plus(str(text))}" target="_blank">{text}</a>
     """
 
 
@@ -97,9 +147,7 @@ def make_asin_link(asin):
         return asin
 
     return f"""
-    <a href="https://www.amazon.com/dp/{asin}" target="_blank">
-        {asin}
-    </a>
+    <a href="https://www.amazon.com/dp/{asin}" target="_blank">{asin}</a>
     """
 
 
@@ -118,7 +166,6 @@ def extract_ngrams(corpus, ngram_range=(1, 1), min_freq=2, top_n=30):
         )
 
         X = vectorizer.fit_transform(corpus)
-
         sums = np.array(X.sum(axis=0)).flatten()
 
         words_freq = [
@@ -135,86 +182,40 @@ def extract_ngrams(corpus, ngram_range=(1, 1), min_freq=2, top_n=30):
 
 
 # =========================================================
-# NICHES (MULTI FILE SAFE)
-# =========================================================
-
-def assign_niche(df):
-    df = df.copy()
-
-    if "Search Term" not in df.columns:
-        return df
-
-    def infer(text):
-        text = str(text).lower()
-
-        if "dog" in text or "cat" in text or "pet" in text:
-            return "pet memorial"
-
-        if "dad" in text or "mom" in text or "father" in text:
-            return "family loss"
-
-        if "funeral" in text:
-            return "funeral service"
-
-        if "garden" in text or "stone" in text:
-            return "outdoor memorial"
-
-        return "general"
-
-    df["Niche"] = df["Search Term"].apply(infer)
-    return df
-
-
-# =========================================================
-# QUARTER FIX
-# =========================================================
-
-def convert_quarter(month):
-    if pd.isna(month):
-        return None
-    return f"Q{((int(month) - 1) // 3) + 1}"
-
-
-# =========================================================
-# INSIGHT ENGINE (REPLACES CLUSTER)
+# INSIGHT CARDS (REPLACES CLUSTER)
 # =========================================================
 
 def build_insight_cards(df):
 
     insights = []
 
-    if "Niche" not in df.columns:
-        return insights
-
     for niche in df["Niche"].dropna().unique():
 
         niche_df = df[df["Niche"] == niche]
         volume = len(niche_df)
 
-        if volume > 200:
-            opportunity = "High Market Opportunity"
-        elif volume > 80:
-            opportunity = "Medium Market Opportunity"
-        else:
-            opportunity = "Emerging Opportunity"
+        opportunity = (
+            "High Market Opportunity" if volume > 200 else
+            "Medium Market Opportunity" if volume > 80 else
+            "Emerging Opportunity"
+        )
 
-        if volume > 150:
-            competition = "High Competition"
-        elif volume > 60:
-            competition = "Medium Competition"
-        else:
-            competition = "Low Competition"
+        competition = (
+            "High Competition" if volume > 150 else
+            "Medium Competition" if volume > 60 else
+            "Low Competition"
+        )
 
         insights.append({
             "niche": niche,
             "opportunity": opportunity,
             "competition": competition,
-            "recommended_products": "Memorial plaques | Custom frames | Garden stones | Wind chimes",
-            "next_actions": [
-                "Validate demand signals",
-                "Expand keyword set",
-                "Test product listings",
-                "Scale top ASIN ads"
+            "products": "Memorial plaques | Frames | Garden stones",
+            "actions": [
+                "Validate demand",
+                "Expand keywords",
+                "Test listings",
+                "Scale ads"
             ]
         })
 
@@ -225,27 +226,26 @@ def render_cards(insights):
 
     for i in insights:
 
-        st.markdown(
-            f"""
-            <div style="
-                padding:16px;
-                border-radius:12px;
-                background:#111827;
-                margin-bottom:12px;
-            ">
-                <h3>{i['niche']}</h3>
+        st.markdown(f"""
+        <div style="
+            padding:16px;
+            margin-bottom:12px;
+            border-radius:14px;
+            background:linear-gradient(135deg,#0f172a,#111827);
+            border:1px solid #1f2937;
+        ">
 
-                <p><b>Market Opportunity:</b> {i['opportunity']}</p>
+        <h3 style="color:#e5e7eb">{i['niche']}</h3>
 
-                <p><b>Competition:</b> {i['competition']}</p>
+        <p><b>Opportunity:</b> {i['opportunity']}</p>
+        <p><b>Competition:</b> {i['competition']}</p>
 
-                <p><b>Recommended Products:</b><br>{i['recommended_products']}</p>
+        <p><b>Products:</b> {i['products']}</p>
 
-                <p><b>Next Actions:</b><br>{" | ".join(i['next_actions'])}</p>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        <p><b>Actions:</b> {" | ".join(i['actions'])}</p>
+
+        </div>
+        """, unsafe_allow_html=True)
 
 
 # =========================================================
@@ -257,62 +257,40 @@ def render_keyword_engine(final_df):
     st.markdown("# Keyword Intelligence")
 
     if final_df is None or final_df.empty:
-        st.info("Upload keyword CSV files to begin.")
+        st.info("Upload keyword CSV files")
         return
 
     # =====================================================
-    # FIX HEADER + CLEAN
+    # PIPELINE FIX ORDER (CRITICAL)
     # =====================================================
 
     final_df = auto_fix_keyword_headers(final_df)
-    final_df = final_df.loc[:, ~final_df.columns.duplicated()]
-
-    # =====================================================
-    # MULTI FILE NICHES
-    # =====================================================
-
+    final_df = normalize_multi_file(final_df)
     final_df = assign_niche(final_df)
 
     # =====================================================
-    # QUARTER ENGINE
+    # QUARTER
     # =====================================================
 
     if "Reporting Date" in final_df.columns:
-
-        final_df["Reporting Date"] = pd.to_datetime(
-            final_df["Reporting Date"],
-            errors="coerce"
-        )
-
+        final_df["Reporting Date"] = pd.to_datetime(final_df["Reporting Date"], errors="coerce")
         final_df["Month"] = final_df["Reporting Date"].dt.month
         final_df["Quarter"] = final_df["Month"].apply(convert_quarter)
 
     # =====================================================
-    # FILTER UI
+    # FILTERS
     # =====================================================
 
     c1, c2, c3 = st.columns(3)
 
     with c1:
-        niche_filter = st.multiselect(
-            "Niche",
-            final_df["Niche"].dropna().unique()
-            if "Niche" in final_df.columns else []
-        )
+        niche_filter = st.multiselect("Niche", final_df["Niche"].dropna().unique())
 
     with c2:
-        quarter_filter = st.multiselect(
-            "Quarter",
-            final_df["Quarter"].dropna().unique()
-            if "Quarter" in final_df.columns else []
-        )
+        quarter_filter = st.multiselect("Quarter", final_df["Quarter"].dropna().unique())
 
     with c3:
-        year_filter = st.multiselect(
-            "Year",
-            final_df["Year"].dropna().unique()
-            if "Year" in final_df.columns else []
-        )
+        year_filter = st.multiselect("Year", final_df.get("Year", []))
 
     filtered_df = final_df.copy()
 
@@ -326,47 +304,10 @@ def render_keyword_engine(final_df):
         filtered_df = filtered_df[filtered_df["Year"].isin(year_filter)]
 
     # =====================================================
-    # SEARCH
-    # =====================================================
-
-    search_value = st.text_input("Quick Search")
-
-    if search_value:
-        filtered_df = filtered_df[
-            filtered_df.astype(str).apply(
-                lambda row: row.str.contains(search_value, case=False, na=False).any(),
-                axis=1
-            )
-        ]
-
-    # =====================================================
-    # LINKS
+    # AGGRID AUTO FIT FIX
     # =====================================================
 
     display_df = filtered_df.copy()
-
-    if "Search Term" in display_df.columns:
-        display_df["Search Term"] = display_df["Search Term"].apply(make_search_link)
-
-    for col in display_df.columns:
-        if "asin" in col.lower():
-            display_df[col] = display_df[col].apply(make_asin_link)
-
-    # =====================================================
-    # METRICS
-    # =====================================================
-
-    m1, m2, m3 = st.columns(3)
-
-    m1.metric("Rows", len(filtered_df))
-    m2.metric("Columns", len(filtered_df.columns))
-    m3.metric("Niches", filtered_df["Niche"].nunique())
-
-    # =====================================================
-    # AGGRID (AUTO FIT FIX)
-    # =====================================================
-
-    st.markdown("## Keyword Dataset")
 
     gb = GridOptionsBuilder.from_dataframe(display_df)
 
@@ -379,9 +320,17 @@ def render_keyword_engine(final_df):
 
     gridOptions = gb.build()
 
-    gridOptions["onGridReady"] = JsCode("""
+    gridOptions["onFirstDataRendered"] = JsCode("""
     function(params) {
         params.api.sizeColumnsToFit();
+
+        setTimeout(() => {
+            let allColumnIds = [];
+            params.columnApi.getAllColumns().forEach(col => {
+                allColumnIds.push(col.getId());
+            });
+            params.columnApi.autoSizeColumns(allColumnIds, false);
+        }, 150);
     }
     """)
 
@@ -390,75 +339,68 @@ def render_keyword_engine(final_df):
         gridOptions=gridOptions,
         theme="alpine-dark",
         height=720,
-        fit_columns_on_grid_load=True,
-        allow_unsafe_jscode=True,
-        update_mode=GridUpdateMode.NO_UPDATE,
+        allow_unsafe_jscode=True
     )
 
     # =====================================================
-    # NLP ENGINE
+    # METRICS
     # =====================================================
 
-    st.markdown("---")
-    st.markdown("# NLP Market Intelligence")
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Rows", len(filtered_df))
+    m2.metric("Columns", len(filtered_df.columns))
+    m3.metric("Niches", filtered_df["Niche"].nunique())
 
-    candidate_columns = [
-        "Search Term",
-        "Keyword",
-        "Product Title",
-        "Title",
-        "Query",
-    ]
+    # =====================================================
+    # NLP
+    # =====================================================
 
-    source_col = next(
-        (c for c in candidate_columns if c in filtered_df.columns),
-        None
-    )
+    st.markdown("# NLP Intelligence")
 
-    if source_col is None:
-        st.warning("No NLP-compatible column found.")
+    col = next((c for c in ["Search Term", "Keyword"] if c in filtered_df.columns), None)
+
+    if col is None:
+        st.warning("No NLP column")
         return
 
-    series = filtered_df[source_col].astype(str).apply(clean_text)
-    corpus = series.tolist()
+    corpus = filtered_df[col].astype(str).apply(clean_text).tolist()
 
     single = extract_ngrams(corpus, (1, 1))
     bigram = extract_ngrams(corpus, (2, 2))
     trigram = extract_ngrams(corpus, (3, 3))
 
     # =====================================================
-    # METRICS
+    # INSIGHT CARDS
     # =====================================================
 
-    c1, c2, c3 = st.columns(3)
+    st.markdown("# Market Intelligence")
 
-    c1.metric("Single Words", len(single))
-    c2.metric("Bigram", len(bigram))
-    c3.metric("Trigram", len(trigram))
+    insights = build_insight_cards(filtered_df)
+    render_cards(insights)
 
     # =====================================================
-    # TABS
+    # RESEARCH UX (FINAL)
     # =====================================================
 
-    t1, t2, t3, t4 = st.tabs([
-        "Single Word",
-        "Bigram",
-        "Trigram",
-        "Market Intelligence"
-    ])
+    st.markdown("## Research Recommendations")
 
-    with t1:
-        st.dataframe(single, use_container_width=True)
+    recs = [
+        "Expand high-intent niches (pet memorial, family loss)",
+        "Identify low competition keywords",
+        "Test POD personalization products",
+        "Scale winning ASINs",
+        "Optimize seasonal demand"
+    ]
 
-    with t2:
-        st.dataframe(bigram, use_container_width=True)
-
-    with t3:
-        st.dataframe(trigram, use_container_width=True)
-
-    with t4:
-
-        st.markdown("## Market Intelligence Cards")
-
-        insights = build_insight_cards(filtered_df)
-        render_cards(insights)
+    for r in recs:
+        st.markdown(f"""
+        <div style="
+            padding:12px;
+            margin-bottom:8px;
+            border-radius:10px;
+            background:#0b1220;
+            border:1px solid #1f2937;
+        ">
+        {r}
+        </div>
+        """, unsafe_allow_html=True)
