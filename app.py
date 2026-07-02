@@ -19,6 +19,72 @@ st.set_page_config(
 )
 
 # =========================================================
+# APP STRUCTURE LOCK
+# =========================================================
+# DO NOT MODIFY CORE ARCHITECTURE BELOW
+#
+# LOCKED FRAMEWORK RULES:
+#
+# 1. Sidebar navigation contains ONLY:
+#    - Keyword Intelligence
+#    - ASIN Intelligence
+#    - Ranking Engine
+#
+# 2. EACH ENGINE HAS:
+#    - Independent CSV uploader
+#    - Independent session_state storage
+#    - Independent dashboard renderer
+#
+# 3. DATA PERSISTENCE:
+#    - Uploaded CSV remains in memory after reload
+#    - Uploaded CSV remains when switching menu
+#    - Data only changes when NEW CSV uploaded
+#    - Clear button manually resets state
+#
+# 4. ENGINE ISOLATION:
+#    - keyword_engine.py ONLY handles keyword analytics
+#    - asin_engine.py ONLY handles ASIN analytics
+#    - ranking_engine.py ONLY handles ranking analytics
+#
+# 5. app.py RESPONSIBILITY:
+#    - Sidebar navigation
+#    - Upload handling
+#    - Session persistence
+#    - Route dataframe into engine renderer
+#
+# 6. ENGINE RESPONSIBILITY:
+#    - Visualization only
+#    - Filtering only
+#    - Metrics only
+#    - Insights only
+#
+# 7. FORBIDDEN CHANGES:
+#    - Do NOT move uploaders into engine files
+#    - Do NOT recreate session_state logic inside engines
+#    - Do NOT create duplicated upload buttons
+#    - Do NOT replace sidebar navigation with tabs
+#    - Do NOT clear dataframe during rerun
+#    - Do NOT mutate dataframe globally inside engines
+#
+# 8. SAFE EXTENSIONS ALLOWED:
+#    - Add new charts
+#    - Add new metrics
+#    - Add new insight models
+#    - Add NLP/AI scoring
+#    - Add clustering
+#    - Add forecasting
+#    - Add export features
+#
+# 9. CSV INGESTION:
+#    - ALL CSV reading MUST use:
+#         utils.csv_utils.read_csv_safe()
+#
+# 10. STREAMLIT RERUN SAFETY:
+#     - session_state is SINGLE SOURCE OF TRUTH
+#
+# =========================================================
+
+# =========================================================
 # CUSTOM CSS
 # =========================================================
 
