@@ -1,7 +1,3 @@
-# =========================================================
-# app.py
-# =========================================================
-
 import streamlit as st
 import pandas as pd
 
@@ -62,11 +58,6 @@ div[data-testid="stMetric"] {
     border-radius: 12px;
 }
 
-.stButton>button {
-    width: 100%;
-    border-radius: 10px;
-}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -74,35 +65,21 @@ div[data-testid="stMetric"] {
 # SESSION STATE
 # =========================================================
 
-# -----------------------------
-# Keyword Dataset
-# -----------------------------
+SESSION_KEYS = {
+    "keyword_df": None,
+    "keyword_files": [],
 
-if "keyword_df" not in st.session_state:
-    st.session_state.keyword_df = None
+    "asin_df": None,
+    "asin_files": [],
 
-if "keyword_file_names" not in st.session_state:
-    st.session_state.keyword_file_names = []
+    "ranking_df": None,
+    "ranking_files": [],
+}
 
-# -----------------------------
-# ASIN Dataset
-# -----------------------------
+for key, default in SESSION_KEYS.items():
 
-if "asin_df" not in st.session_state:
-    st.session_state.asin_df = None
-
-if "asin_file_names" not in st.session_state:
-    st.session_state.asin_file_names = []
-
-# -----------------------------
-# Ranking Dataset
-# -----------------------------
-
-if "ranking_df" not in st.session_state:
-    st.session_state.ranking_df = None
-
-if "ranking_file_names" not in st.session_state:
-    st.session_state.ranking_file_names = []
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 # =========================================================
 # SIDEBAR
@@ -113,11 +90,13 @@ st.sidebar.title("MRnD")
 st.sidebar.markdown("### Amazon Research Framework")
 
 # =========================================================
-# NAVIGATION
+# MENU
 # =========================================================
 
 selected_menu = st.sidebar.radio(
-    "Select Intelligence Engine",
+
+    "Engine",
+
     [
         "Keyword Intelligence",
         "ASIN Intelligence",
@@ -125,45 +104,57 @@ selected_menu = st.sidebar.radio(
     ]
 )
 
-st.sidebar.markdown("---")
+# =========================================================
+# MAIN TITLE
+# =========================================================
+
+st.markdown(
+    """
+    <div class="dashboard-title">
+        Amazon Research Dashboard
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # =========================================================
-# KEYWORD ENGINE SIDEBAR
+# KEYWORD ENGINE
 # =========================================================
 
 if selected_menu == "Keyword Intelligence":
 
-    st.sidebar.markdown("## Keyword CSV Import")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Upload Keyword CSV")
 
-    uploaded_files = st.sidebar.file_uploader(
-        "Upload Keyword CSV",
+    keyword_files = st.sidebar.file_uploader(
+        "Import Keyword CSV",
         type=["csv"],
         accept_multiple_files=True,
-        key="keyword_uploader"
+        key="keyword_csv_uploader"
     )
 
     # =====================================================
-    # PROCESS CSV
+    # PROCESS FILES
     # =====================================================
 
-    if uploaded_files:
+    if keyword_files:
 
         all_data = []
 
-        for uploaded_file in uploaded_files:
+        for uploaded_file in keyword_files:
 
             try:
 
                 raw_df = read_csv_safe(uploaded_file)
 
                 if raw_df is None:
-                    st.sidebar.warning(
+                    st.warning(
                         f"Cannot read file: {uploaded_file.name}"
                     )
                     continue
 
                 # ==========================================
-                # HEADER
+                # META
                 # ==========================================
 
                 first_row = (
@@ -174,6 +165,10 @@ if selected_menu == "Keyword Intelligence":
                 )
 
                 meta_text = " | ".join(first_row)
+
+                # ==========================================
+                # HEADER
+                # ==========================================
 
                 header_row = (
                     raw_df.iloc[1]
@@ -198,9 +193,11 @@ if selected_menu == "Keyword Intelligence":
 
                     try:
 
-                        niche = meta_text.split(
-                            'Search Term=["'
-                        )[1].split('"]')[0]
+                        niche = (
+                            meta_text
+                            .split('Search Term=["')[1]
+                            .split('"]')[0]
+                        )
 
                     except:
                         pass
@@ -217,9 +214,11 @@ if selected_menu == "Keyword Intelligence":
 
                     try:
 
-                        year = meta_text.split(
-                            'Select year=["'
-                        )[1].split('"]')[0]
+                        year = (
+                            meta_text
+                            .split('Select year=["')[1]
+                            .split('"]')[0]
+                        )
 
                     except:
                         pass
@@ -227,7 +226,7 @@ if selected_menu == "Keyword Intelligence":
                 data_df["Year"] = year
 
                 # ==========================================
-                # REPORTING DATE
+                # DATE
                 # ==========================================
 
                 if "Reporting Date" in data_df.columns:
@@ -249,8 +248,8 @@ if selected_menu == "Keyword Intelligence":
 
             except Exception as e:
 
-                st.sidebar.error(
-                    f"{uploaded_file.name}: {e}"
+                st.error(
+                    f"Error processing {uploaded_file.name}: {e}"
                 )
 
         # =================================================
@@ -259,26 +258,24 @@ if selected_menu == "Keyword Intelligence":
 
         if all_data:
 
-            final_df = pd.concat(
+            st.session_state.keyword_df = pd.concat(
                 all_data,
                 ignore_index=True
             )
 
-            st.session_state.keyword_df = final_df
-
-            st.session_state.keyword_file_names = [
-                f.name for f in uploaded_files
+            st.session_state.keyword_files = [
+                f.name for f in keyword_files
             ]
 
     # =====================================================
-    # DATASET STATUS
+    # FILE STATUS
     # =====================================================
 
-    if st.session_state.keyword_file_names:
+    if st.session_state.keyword_files:
 
         st.sidebar.success("Keyword Dataset Loaded")
 
-        for file_name in st.session_state.keyword_file_names:
+        for file_name in st.session_state.keyword_files:
 
             st.sidebar.caption(f"• {file_name}")
 
@@ -287,31 +284,51 @@ if selected_menu == "Keyword Intelligence":
         ):
 
             st.session_state.keyword_df = None
-
-            st.session_state.keyword_file_names = []
+            st.session_state.keyword_files = []
 
             st.rerun()
 
+    # =====================================================
+    # RENDER
+    # =====================================================
+
+    if st.session_state.keyword_df is not None:
+
+        render_keyword_engine(
+            st.session_state.keyword_df
+        )
+
+    else:
+
+        st.info(
+            "Upload keyword CSV files to begin."
+        )
+
 # =========================================================
-# ASIN ENGINE SIDEBAR
+# ASIN ENGINE
 # =========================================================
 
 elif selected_menu == "ASIN Intelligence":
 
-    st.sidebar.markdown("## ASIN CSV Import")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Upload ASIN CSV")
 
-    uploaded_files = st.sidebar.file_uploader(
-        "Upload ASIN CSV",
+    asin_files = st.sidebar.file_uploader(
+        "Import ASIN CSV",
         type=["csv"],
         accept_multiple_files=True,
-        key="asin_uploader"
+        key="asin_csv_uploader"
     )
 
-    if uploaded_files:
+    # =====================================================
+    # PROCESS FILES
+    # =====================================================
+
+    if asin_files:
 
         all_data = []
 
-        for uploaded_file in uploaded_files:
+        for uploaded_file in asin_files:
 
             try:
 
@@ -319,7 +336,7 @@ elif selected_menu == "ASIN Intelligence":
 
                 if df is None:
 
-                    st.sidebar.warning(
+                    st.warning(
                         f"Cannot read file: {uploaded_file.name}"
                     )
 
@@ -329,32 +346,30 @@ elif selected_menu == "ASIN Intelligence":
 
             except Exception as e:
 
-                st.sidebar.error(
-                    f"{uploaded_file.name}: {e}"
+                st.error(
+                    f"Error processing {uploaded_file.name}: {e}"
                 )
 
         if all_data:
 
-            final_df = pd.concat(
+            st.session_state.asin_df = pd.concat(
                 all_data,
                 ignore_index=True
             )
 
-            st.session_state.asin_df = final_df
-
-            st.session_state.asin_file_names = [
-                f.name for f in uploaded_files
+            st.session_state.asin_files = [
+                f.name for f in asin_files
             ]
 
     # =====================================================
-    # DATASET STATUS
+    # FILE STATUS
     # =====================================================
 
-    if st.session_state.asin_file_names:
+    if st.session_state.asin_files:
 
         st.sidebar.success("ASIN Dataset Loaded")
 
-        for file_name in st.session_state.asin_file_names:
+        for file_name in st.session_state.asin_files:
 
             st.sidebar.caption(f"• {file_name}")
 
@@ -363,31 +378,51 @@ elif selected_menu == "ASIN Intelligence":
         ):
 
             st.session_state.asin_df = None
-
-            st.session_state.asin_file_names = []
+            st.session_state.asin_files = []
 
             st.rerun()
 
+    # =====================================================
+    # RENDER
+    # =====================================================
+
+    if st.session_state.asin_df is not None:
+
+        render_asin_engine(
+            st.session_state.asin_df
+        )
+
+    else:
+
+        st.info(
+            "Upload ASIN CSV files to begin."
+        )
+
 # =========================================================
-# RANKING ENGINE SIDEBAR
+# RANKING ENGINE
 # =========================================================
 
 elif selected_menu == "Ranking Engine":
 
-    st.sidebar.markdown("## Ranking CSV Import")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Upload Ranking CSV")
 
-    uploaded_files = st.sidebar.file_uploader(
-        "Upload Ranking CSV",
+    ranking_files = st.sidebar.file_uploader(
+        "Import Ranking CSV",
         type=["csv"],
         accept_multiple_files=True,
-        key="ranking_uploader"
+        key="ranking_csv_uploader"
     )
 
-    if uploaded_files:
+    # =====================================================
+    # PROCESS FILES
+    # =====================================================
+
+    if ranking_files:
 
         all_data = []
 
-        for uploaded_file in uploaded_files:
+        for uploaded_file in ranking_files:
 
             try:
 
@@ -395,7 +430,7 @@ elif selected_menu == "Ranking Engine":
 
                 if df is None:
 
-                    st.sidebar.warning(
+                    st.warning(
                         f"Cannot read file: {uploaded_file.name}"
                     )
 
@@ -405,32 +440,30 @@ elif selected_menu == "Ranking Engine":
 
             except Exception as e:
 
-                st.sidebar.error(
-                    f"{uploaded_file.name}: {e}"
+                st.error(
+                    f"Error processing {uploaded_file.name}: {e}"
                 )
 
         if all_data:
 
-            final_df = pd.concat(
+            st.session_state.ranking_df = pd.concat(
                 all_data,
                 ignore_index=True
             )
 
-            st.session_state.ranking_df = final_df
-
-            st.session_state.ranking_file_names = [
-                f.name for f in uploaded_files
+            st.session_state.ranking_files = [
+                f.name for f in ranking_files
             ]
 
     # =====================================================
-    # DATASET STATUS
+    # FILE STATUS
     # =====================================================
 
-    if st.session_state.ranking_file_names:
+    if st.session_state.ranking_files:
 
         st.sidebar.success("Ranking Dataset Loaded")
 
-        for file_name in st.session_state.ranking_file_names:
+        for file_name in st.session_state.ranking_files:
 
             st.sidebar.caption(f"• {file_name}")
 
@@ -439,50 +472,22 @@ elif selected_menu == "Ranking Engine":
         ):
 
             st.session_state.ranking_df = None
-
-            st.session_state.ranking_file_names = []
+            st.session_state.ranking_files = []
 
             st.rerun()
 
-# =========================================================
-# MAIN TITLE
-# =========================================================
+    # =====================================================
+    # RENDER
+    # =====================================================
 
-st.markdown(
-    """
-    <div class="dashboard-title">
-        Amazon Research Dashboard
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    if st.session_state.ranking_df is not None:
 
-# =========================================================
-# ROUTER
-# =========================================================
-
-if selected_menu == "Keyword Intelligence":
-
-    if st.session_state.keyword_df is None:
-
-        st.info(
-            "Upload keyword CSV files to begin."
+        render_ranking_engine(
+            st.session_state.ranking_df
         )
 
     else:
 
-        render_keyword_engine(
-            st.session_state.keyword_df
+        st.info(
+            "Upload ranking CSV files to begin."
         )
-
-# =========================================================
-
-elif selected_menu == "ASIN Intelligence":
-
-    render_asin_engine()
-
-# =========================================================
-
-elif selected_menu == "Ranking Engine":
-
-    render_ranking_engine()
