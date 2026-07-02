@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
 
+from utils.csv_utils import read_csv_safe
+
 from service.keyword_engine import render_keyword_engine
 from service.asin_engine import render_asin_engine
 from service.ranking_engine import render_ranking_engine
-
-from utils.csv_utils import read_csv_safe
 
 # =========================================================
 # PAGE CONFIG
@@ -19,133 +19,85 @@ st.set_page_config(
 )
 
 # =========================================================
-# APP STRUCTURE LOCK
+# APP LOCK
 # =========================================================
-# DO NOT MODIFY CORE ARCHITECTURE BELOW
 #
-# LOCKED FRAMEWORK RULES:
+# app.py RESPONSIBILITIES ONLY
 #
-# 1. Sidebar navigation contains ONLY:
-#    - Keyword Intelligence
-#    - ASIN Intelligence
-#    - Ranking Engine
+# ✔ Upload CSV
+# ✔ Session State
+# ✔ Sidebar Navigation
+# ✔ Route dataframe into engine
 #
-# 2. EACH ENGINE HAS:
-#    - Independent CSV uploader
-#    - Independent session_state storage
-#    - Independent dashboard renderer
+# DO NOT ADD
 #
-# 3. DATA PERSISTENCE:
-#    - Uploaded CSV remains in memory after reload
-#    - Uploaded CSV remains when switching menu
-#    - Data only changes when NEW CSV uploaded
-#    - Clear button manually resets state
+# ✘ Header fixing
+# ✘ Metadata parsing
+# ✘ Business logic
+# ✘ NLP
+# ✘ Dashboard logic
+# ✘ Data preprocessing
 #
-# 4. ENGINE ISOLATION:
-#    - keyword_engine.py ONLY handles keyword analytics
-#    - asin_engine.py ONLY handles ASIN analytics
-#    - ranking_engine.py ONLY handles ranking analytics
+# ALL DATA PROCESSING BELONGS TO:
 #
-# 5. app.py RESPONSIBILITY:
-#    - Sidebar navigation
-#    - Upload handling
-#    - Session persistence
-#    - Route dataframe into engine renderer
-#
-# 6. ENGINE RESPONSIBILITY:
-#    - Visualization only
-#    - Filtering only
-#    - Metrics only
-#    - Insights only
-#
-# 7. FORBIDDEN CHANGES:
-#    - Do NOT move uploaders into engine files
-#    - Do NOT recreate session_state logic inside engines
-#    - Do NOT create duplicated upload buttons
-#    - Do NOT replace sidebar navigation with tabs
-#    - Do NOT clear dataframe during rerun
-#    - Do NOT mutate dataframe globally inside engines
-#
-# 8. SAFE EXTENSIONS ALLOWED:
-#    - Add new charts
-#    - Add new metrics
-#    - Add new insight models
-#    - Add NLP/AI scoring
-#    - Add clustering
-#    - Add forecasting
-#    - Add export features
-#
-# 9. CSV INGESTION:
-#    - ALL CSV reading MUST use:
-#         utils.csv_utils.read_csv_safe()
-#
-# 10. STREAMLIT RERUN SAFETY:
-#     - session_state is SINGLE SOURCE OF TRUTH
+# keyword_engine.py
+# asin_engine.py
+# ranking_engine.py
 #
 # =========================================================
 
 # =========================================================
-# CUSTOM CSS
+# CSS
 # =========================================================
 
 st.markdown("""
 <style>
 
-html, body, [class*="css"]  {
-    background-color: #050816;
-    color: white;
+html, body, [class*="css"]{
+    background:#050816;
+    color:white;
 }
 
-.block-container {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-    max-width: 100%;
+.block-container{
+    max-width:100%;
+    padding-top:1rem;
 }
 
-section[data-testid="stSidebar"] {
-    background-color: #111827;
-    border-right: 1px solid #1f2937;
+section[data-testid="stSidebar"]{
+    background:#111827;
 }
 
-section[data-testid="stSidebar"] * {
-    color: white;
-}
-
-.dashboard-title {
-    font-size: 42px;
-    font-weight: 800;
-    margin-bottom: 10px;
-}
-
-div[data-testid="stMetric"] {
-    background: #111827;
-    border: 1px solid #1f2937;
-    padding: 14px;
-    border-radius: 12px;
+.dashboard-title{
+    font-size:42px;
+    font-weight:800;
+    margin-bottom:10px;
 }
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# SESSION STATE
+# SESSION
 # =========================================================
 
-SESSION_KEYS = {
-    "keyword_df": None,
-    "keyword_files": [],
+DEFAULT_SESSION = {
 
-    "asin_df": None,
-    "asin_files": [],
+    "keyword_df":None,
+    "keyword_files":[],
 
-    "ranking_df": None,
-    "ranking_files": [],
+    "asin_df":None,
+    "asin_files":[],
+
+    "ranking_df":None,
+    "ranking_files":[]
+
 }
 
-for key, default in SESSION_KEYS.items():
+for k,v in DEFAULT_SESSION.items():
 
-    if key not in st.session_state:
-        st.session_state[key] = default
+    if k not in st.session_state:
+
+        st.session_state[k]=v
 
 # =========================================================
 # SIDEBAR
@@ -153,407 +105,202 @@ for key, default in SESSION_KEYS.items():
 
 st.sidebar.title("MRnD")
 
-st.sidebar.markdown("### Amazon Research Framework")
-
-# =========================================================
-# MENU
-# =========================================================
-
-selected_menu = st.sidebar.radio(
+engine = st.sidebar.radio(
 
     "Engine",
 
     [
+
         "Keyword Intelligence",
         "ASIN Intelligence",
         "Ranking Engine"
+
     ]
+
 )
 
 # =========================================================
-# MAIN TITLE
+# TITLE
 # =========================================================
 
-st.markdown(
-    """
-    <div class="dashboard-title">
-        Amazon Research Dashboard
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown("""
+
+<div class="dashboard-title">
+
+Amazon Research Dashboard
+
+</div>
+
+""",unsafe_allow_html=True)
 
 # =========================================================
-# KEYWORD ENGINE
+# GENERIC UPLOADER
 # =========================================================
 
-if selected_menu == "Keyword Intelligence":
+def upload_dataset(
+
+    title,
+    uploader_key,
+    session_df,
+    session_files
+
+):
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### Upload Keyword CSV")
+    st.sidebar.markdown(f"### {title}")
 
-    keyword_files = st.sidebar.file_uploader(
-        "Import Keyword CSV",
+    files = st.sidebar.file_uploader(
+
+        f"Import {title}",
+
         type=["csv"],
+
         accept_multiple_files=True,
-        key="keyword_csv_uploader"
+
+        key=uploader_key
+
     )
 
-    # =====================================================
-    # PROCESS FILES
-    # =====================================================
+    if files:
 
-    if keyword_files:
+        dfs=[]
 
-        all_data = []
+        for file in files:
 
-        for uploaded_file in keyword_files:
+            df = read_csv_safe(file)
 
-            try:
+            if df is None or df.empty:
 
-                raw_df = read_csv_safe(uploaded_file)
+                st.warning(f"Cannot read {file.name}")
 
-                if raw_df is None:
-                    st.warning(
-                        f"Cannot read file: {uploaded_file.name}"
-                    )
-                    continue
+                continue
 
-                # ==========================================
-                # META
-                # ==========================================
+            dfs.append(df)
 
-                first_row = (
-                    raw_df.iloc[0]
-                    .fillna("")
-                    .astype(str)
-                    .tolist()
-                )
+        if dfs:
 
-                meta_text = " | ".join(first_row)
+            st.session_state[session_df]=pd.concat(
 
-                # ==========================================
-                # HEADER
-                # ==========================================
+                dfs,
 
-                header_row = (
-                    raw_df.iloc[1]
-                    .fillna("")
-                    .astype(str)
-                    .tolist()
-                )
-
-                data_df = raw_df.iloc[2:].copy()
-
-                data_df.columns = header_row
-
-                data_df = data_df.reset_index(drop=True)
-
-                # ==========================================
-                # NICHE
-                # ==========================================
-
-                niche = ""
-
-                if 'Search Term=["' in meta_text:
-
-                    try:
-
-                        niche = (
-                            meta_text
-                            .split('Search Term=["')[1]
-                            .split('"]')[0]
-                        )
-
-                    except:
-                        pass
-
-                data_df["Niche"] = niche
-
-                # ==========================================
-                # YEAR
-                # ==========================================
-
-                year = ""
-
-                if 'Select year=["' in meta_text:
-
-                    try:
-
-                        year = (
-                            meta_text
-                            .split('Select year=["')[1]
-                            .split('"]')[0]
-                        )
-
-                    except:
-                        pass
-
-                data_df["Year"] = year
-
-                # ==========================================
-                # DATE
-                # ==========================================
-
-                if "Reporting Date" in data_df.columns:
-
-                    data_df["Reporting Date"] = pd.to_datetime(
-                        data_df["Reporting Date"],
-                        errors="coerce"
-                    )
-
-                    data_df["Month"] = (
-                        data_df["Reporting Date"].dt.month
-                    )
-
-                    data_df["Quarter"] = (
-                        data_df["Reporting Date"].dt.quarter
-                    )
-
-                all_data.append(data_df)
-
-            except Exception as e:
-
-                st.error(
-                    f"Error processing {uploaded_file.name}: {e}"
-                )
-
-        # =================================================
-        # SAVE SESSION
-        # =================================================
-
-        if all_data:
-
-            st.session_state.keyword_df = pd.concat(
-                all_data,
                 ignore_index=True
+
             )
 
-            st.session_state.keyword_files = [
-                f.name for f in keyword_files
+            st.session_state[session_files]=[
+
+                f.name for f in files
+
             ]
 
-    # =====================================================
-    # FILE STATUS
-    # =====================================================
+    if st.session_state[session_files]:
 
-    if st.session_state.keyword_files:
+        st.sidebar.success("Dataset Loaded")
 
-        st.sidebar.success("Keyword Dataset Loaded")
+        for f in st.session_state[session_files]:
 
-        for file_name in st.session_state.keyword_files:
-
-            st.sidebar.caption(f"• {file_name}")
+            st.sidebar.caption(f"• {f}")
 
         if st.sidebar.button(
-            "Clear Keyword Dataset"
+
+            "Clear Dataset",
+
+            key=session_df+"_clear"
+
         ):
 
-            st.session_state.keyword_df = None
-            st.session_state.keyword_files = []
+            st.session_state[session_df]=None
+
+            st.session_state[session_files]=[]
 
             st.rerun()
 
-    # =====================================================
-    # RENDER
-    # =====================================================
+# =========================================================
+# KEYWORD
+# =========================================================
+
+if engine=="Keyword Intelligence":
+
+    upload_dataset(
+
+        "Keyword CSV",
+
+        "keyword_upload",
+
+        "keyword_df",
+
+        "keyword_files"
+
+    )
 
     if st.session_state.keyword_df is not None:
 
         render_keyword_engine(
-            st.session_state.keyword_df
+
+            st.session_state.keyword_df.copy()
+
         )
 
     else:
 
-        st.info(
-            "Upload keyword CSV files to begin."
-        )
+        st.info("Upload Keyword CSV.")
 
 # =========================================================
-# ASIN ENGINE
+# ASIN
 # =========================================================
 
-elif selected_menu == "ASIN Intelligence":
+elif engine=="ASIN Intelligence":
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Upload ASIN CSV")
+    upload_dataset(
 
-    asin_files = st.sidebar.file_uploader(
-        "Import ASIN CSV",
-        type=["csv"],
-        accept_multiple_files=True,
-        key="asin_csv_uploader"
+        "ASIN CSV",
+
+        "asin_upload",
+
+        "asin_df",
+
+        "asin_files"
+
     )
-
-    # =====================================================
-    # PROCESS FILES
-    # =====================================================
-
-    if asin_files:
-
-        all_data = []
-
-        for uploaded_file in asin_files:
-
-            try:
-
-                df = read_csv_safe(uploaded_file)
-
-                if df is None:
-
-                    st.warning(
-                        f"Cannot read file: {uploaded_file.name}"
-                    )
-
-                    continue
-
-                all_data.append(df)
-
-            except Exception as e:
-
-                st.error(
-                    f"Error processing {uploaded_file.name}: {e}"
-                )
-
-        if all_data:
-
-            st.session_state.asin_df = pd.concat(
-                all_data,
-                ignore_index=True
-            )
-
-            st.session_state.asin_files = [
-                f.name for f in asin_files
-            ]
-
-    # =====================================================
-    # FILE STATUS
-    # =====================================================
-
-    if st.session_state.asin_files:
-
-        st.sidebar.success("ASIN Dataset Loaded")
-
-        for file_name in st.session_state.asin_files:
-
-            st.sidebar.caption(f"• {file_name}")
-
-        if st.sidebar.button(
-            "Clear ASIN Dataset"
-        ):
-
-            st.session_state.asin_df = None
-            st.session_state.asin_files = []
-
-            st.rerun()
-
-    # =====================================================
-    # RENDER
-    # =====================================================
 
     if st.session_state.asin_df is not None:
 
         render_asin_engine(
-            st.session_state.asin_df
+
+            st.session_state.asin_df.copy()
+
         )
 
     else:
 
-        st.info(
-            "Upload ASIN CSV files to begin."
-        )
+        st.info("Upload ASIN CSV.")
 
 # =========================================================
-# RANKING ENGINE
+# RANKING
 # =========================================================
 
-elif selected_menu == "Ranking Engine":
+elif engine=="Ranking Engine":
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Upload Ranking CSV")
+    upload_dataset(
 
-    ranking_files = st.sidebar.file_uploader(
-        "Import Ranking CSV",
-        type=["csv"],
-        accept_multiple_files=True,
-        key="ranking_csv_uploader"
+        "Ranking CSV",
+
+        "ranking_upload",
+
+        "ranking_df",
+
+        "ranking_files"
+
     )
-
-    # =====================================================
-    # PROCESS FILES
-    # =====================================================
-
-    if ranking_files:
-
-        all_data = []
-
-        for uploaded_file in ranking_files:
-
-            try:
-
-                df = read_csv_safe(uploaded_file)
-
-                if df is None:
-
-                    st.warning(
-                        f"Cannot read file: {uploaded_file.name}"
-                    )
-
-                    continue
-
-                all_data.append(df)
-
-            except Exception as e:
-
-                st.error(
-                    f"Error processing {uploaded_file.name}: {e}"
-                )
-
-        if all_data:
-
-            st.session_state.ranking_df = pd.concat(
-                all_data,
-                ignore_index=True
-            )
-
-            st.session_state.ranking_files = [
-                f.name for f in ranking_files
-            ]
-
-    # =====================================================
-    # FILE STATUS
-    # =====================================================
-
-    if st.session_state.ranking_files:
-
-        st.sidebar.success("Ranking Dataset Loaded")
-
-        for file_name in st.session_state.ranking_files:
-
-            st.sidebar.caption(f"• {file_name}")
-
-        if st.sidebar.button(
-            "Clear Ranking Dataset"
-        ):
-
-            st.session_state.ranking_df = None
-            st.session_state.ranking_files = []
-
-            st.rerun()
-
-    # =====================================================
-    # RENDER
-    # =====================================================
 
     if st.session_state.ranking_df is not None:
 
         render_ranking_engine(
-            st.session_state.ranking_df
+
+            st.session_state.ranking_df.copy()
+
         )
 
     else:
 
-        st.info(
-            "Upload ranking CSV files to begin."
-        )
+        st.info("Upload Ranking CSV.")
