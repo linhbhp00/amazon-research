@@ -730,10 +730,16 @@ def render_keyword_engine(final_df):
         filter=True,
         resizable=True,
         floatingFilter=True,
+    
+        # auto fit
+        flex=1,
+        minWidth=120,
+    
+        # tránh xuống dòng
         wrapText=False,
         autoHeight=False,
     )
-
+    
     cell_renderer = JsCode("""
     class UrlCellRenderer {
       init(params) {
