@@ -426,14 +426,22 @@ def render_asin_engine(final_df):
 
     if revenue_col:
 
-        final_df["ASIN Revenue"] = (
+        # numeric dùng cho chart/filter
+        final_df["_ASIN Revenue Numeric"] = (
             final_df[revenue_col]
             .apply(clean_numeric)
         )
-
-    else:
-
-        final_df["ASIN Revenue"] = 0
+    
+            # display format US
+            final_df["ASIN Revenue"] = (
+                final_df["_ASIN Revenue Numeric"]
+                .apply(lambda x: f"{x:,.2f}")
+            )
+        
+        else:
+        
+            final_df["_ASIN Revenue Numeric"] = 0
+            final_df["ASIN Revenue"] = "0.00"
 
     # =====================================================
     # LISTING AGE
@@ -849,11 +857,11 @@ def render_asin_engine(final_df):
         "## Competitor Revenue Distribution"
     )
 
-    revenue_chart = (
+       revenue_chart = (
         filtered_df
         .groupby("Group Before Sales")[
-            "ASIN Revenue"
-        ]
+            "_ASIN Revenue Numeric"
+        ]    
         .sum()
         .sort_values(
             ascending=False
@@ -952,11 +960,16 @@ def render_asin_engine(final_df):
         .agg({
 
             "ASIN": "count",
-            "ASIN Revenue": "sum",
+            "_ASIN Revenue Numeric": "sum",
             "ASIN Sales": "sum",
 
         })
         .reset_index()
+    )
+
+    competitor_summary["Total Revenue"] = (
+        competitor_summary["Total Revenue"]
+        .apply(lambda x: f"{x:,.2f}")
     )
 
     competitor_summary.columns = [
