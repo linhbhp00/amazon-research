@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 from urllib.parse import quote_plus
 
@@ -34,6 +33,7 @@ CREATION_DATE_COLUMNS = [
     "Launch Date",
     "Date Created",
 ]
+
 
 # =========================================================
 # VALID HEADER
@@ -120,7 +120,7 @@ def auto_fix_asin_headers(df):
 
 
 # =========================================================
-# SEARCH LINK
+# AMAZON SEARCH LINK
 # =========================================================
 
 def make_search_link(text):
@@ -136,7 +136,7 @@ def make_search_link(text):
     style="
         color:#60a5fa;
         text-decoration:none;
-        font-weight:600;
+        font-weight:500;
     ">
     {text}
     </a>
@@ -160,7 +160,7 @@ def make_asin_link(asin):
     style="
         color:#60a5fa;
         text-decoration:none;
-        font-weight:700;
+        font-weight:600;
     ">
     {asin}
     </a>
@@ -168,7 +168,7 @@ def make_asin_link(asin):
 
 
 # =========================================================
-# URL LINK
+# URL BACKLINK
 # =========================================================
 
 def make_url_link(url):
@@ -184,7 +184,7 @@ def make_url_link(url):
     style="
         color:#60a5fa;
         text-decoration:none;
-        font-weight:600;
+        font-weight:500;
     ">
     Open URL
     </a>
@@ -192,7 +192,7 @@ def make_url_link(url):
 
 
 # =========================================================
-# SELLER AGE GROUP
+# SELLER GROUP
 # =========================================================
 
 def classify_seller_age(months):
@@ -210,7 +210,7 @@ def classify_seller_age(months):
 
 
 # =========================================================
-# LISTING AGE GROUP
+# LISTING GROUP
 # =========================================================
 
 def classify_listing_age(months):
@@ -254,51 +254,21 @@ def build_strategy(group):
         "Strong moat competitor. Avoid direct competition and focus on underserved sub-niches.",
 
         "Old Seller + New Listing":
-        "Large seller testing new market opportunities. Monitor growth closely.",
+        "Large seller testing new market opportunities. Monitor growth velocity closely.",
 
         "Mid Seller + Mid Listing":
-        "Stable seller. Learn pricing, positioning and keyword patterns.",
+        "Stable sellers surviving in market. Study pricing and keyword structure.",
 
         "New Seller + New Listing":
-        "Potential trend opportunity. Watch acceleration carefully.",
+        "Potential fast-moving trend opportunity. Watch acceleration carefully.",
 
         "New Seller + Mid Listing":
-        "Weak demand or execution. Usually avoid unless signals improve.",
+        "Weak demand or poor execution. Usually avoid unless market signals improve.",
     }
 
     return strategies.get(
         group,
         "Research competitor behavior further."
-    )
-
-
-# =========================================================
-# ACTION LABEL
-# =========================================================
-
-def build_action_label(group):
-
-    actions = {
-
-        "Old Seller + Old Listing":
-        "Avoid Direct Competition",
-
-        "Old Seller + New Listing":
-        "Monitor Closely",
-
-        "Mid Seller + Mid Listing":
-        "Learn & Follow",
-
-        "New Seller + New Listing":
-        "Trend Opportunity",
-
-        "New Seller + Mid Listing":
-        "Low Priority",
-    }
-
-    return actions.get(
-        group,
-        "Further Research"
     )
 
 
@@ -400,18 +370,13 @@ def render_asin_engine(final_df):
             .apply(build_strategy)
         )
 
-        final_df["Action"] = (
-            final_df["Competitor Group"]
-            .apply(build_action_label)
-        )
-
     # =====================================================
     # SEARCH
     # =====================================================
 
     search_value = st.text_input(
         "Quick Search",
-        placeholder="Search ASIN, title, keyword..."
+        placeholder="Search ASIN, brand, keyword..."
     )
 
     filtered_df = final_df.copy()
@@ -452,7 +417,7 @@ def render_asin_engine(final_df):
         )
 
     # =====================================================
-    # ASIN LINK
+    # ASIN LINKS
     # =====================================================
 
     for col in display_df.columns:
@@ -465,7 +430,7 @@ def render_asin_engine(final_df):
             )
 
     # =====================================================
-    # SEARCH LINKS
+    # TITLE / BRAND LINKS
     # =====================================================
 
     for col in display_df.columns:
@@ -489,10 +454,7 @@ def render_asin_engine(final_df):
 
     for col in display_df.columns:
 
-        if (
-            "url" in col.lower()
-            and col not in IMAGE_COLUMNS
-        ):
+        if "url" in col.lower():
 
             display_df[col] = (
                 display_df[col]
@@ -556,7 +518,6 @@ def render_asin_engine(final_df):
 
     cell_renderer = JsCode("""
     class UrlCellRenderer {
-
       init(params) {
         this.eGui = document.createElement('div');
         this.eGui.innerHTML = params.value || '';
@@ -577,21 +538,14 @@ def render_asin_engine(final_df):
 
       init(params) {
 
-        this.eGui = document.createElement('div');
+        this.eGui = document.createElement('img');
 
-        this.eGui.innerHTML = `
-          <img
-            src="${params.value}"
-            style="
-              width:80px;
-              height:80px;
-              object-fit:contain;
-              border-radius:10px;
-              background:white;
-              padding:4px;
-            "
-          />
-        `;
+        this.eGui.src = params.value;
+
+        this.eGui.style.width = '70px';
+        this.eGui.style.height = '70px';
+        this.eGui.style.objectFit = 'contain';
+        this.eGui.style.borderRadius = '8px';
       }
 
       getGui() {
@@ -609,78 +563,24 @@ def render_asin_engine(final_df):
 
         if (params.value <= 6) {
             return {
-                'backgroundColor': '#dcfce7',
-                'color': '#166534',
-                'fontWeight': '700',
-                'borderRadius': '6px'
+                'backgroundColor': '#052e16',
+                'color': '#86efac',
+                'fontWeight': '600'
             }
         }
 
         else if (params.value <= 24) {
             return {
-                'backgroundColor': '#dbeafe',
-                'color': '#1d4ed8',
-                'fontWeight': '700',
-                'borderRadius': '6px'
+                'backgroundColor': '#3b0764',
+                'color': '#d8b4fe',
+                'fontWeight': '600'
             }
         }
 
         return {
-            'backgroundColor': '#fee2e2',
-            'color': '#b91c1c',
-            'fontWeight': '700',
-            'borderRadius': '6px'
-        }
-    }
-    """)
-
-    # =====================================================
-    # ACTION COLOR
-    # =====================================================
-
-    action_cell_style = JsCode("""
-    function(params) {
-
-        if (!params.value) {
-            return {}
-        }
-
-        if (params.value.includes('Avoid')) {
-            return {
-                'backgroundColor': '#fee2e2',
-                'color': '#b91c1c',
-                'fontWeight': '700',
-            }
-        }
-
-        if (params.value.includes('Monitor')) {
-            return {
-                'backgroundColor': '#fef3c7',
-                'color': '#92400e',
-                'fontWeight': '700',
-            }
-        }
-
-        if (params.value.includes('Learn')) {
-            return {
-                'backgroundColor': '#dbeafe',
-                'color': '#1d4ed8',
-                'fontWeight': '700',
-            }
-        }
-
-        if (params.value.includes('Trend')) {
-            return {
-                'backgroundColor': '#dcfce7',
-                'color': '#166534',
-                'fontWeight': '700',
-            }
-        }
-
-        return {
-            'backgroundColor': '#f3f4f6',
-            'color': '#374151',
-            'fontWeight': '700',
+            'backgroundColor': '#450a0a',
+            'color': '#fca5a5',
+            'fontWeight': '600'
         }
     }
     """)
@@ -703,13 +603,12 @@ def render_asin_engine(final_df):
                 col,
                 header_name="Image",
                 cellRenderer=image_renderer,
-                width=120,
+                width=90,
                 pinned="left",
-                autoHeight=True,
             )
 
         # ==========================================
-        # HTML RENDER
+        # URL / ASIN / TITLE
         # ==========================================
 
         if (
@@ -726,7 +625,7 @@ def render_asin_engine(final_df):
             )
 
         # ==========================================
-        # FREEZE ASIN
+        # PIN ASIN
         # ==========================================
 
         if "asin" in col_lower:
@@ -746,40 +645,6 @@ def render_asin_engine(final_df):
             gb.configure_column(
                 col,
                 cellStyle=age_cell_style
-            )
-
-        # ==========================================
-        # SELLER GROUP COLOR
-        # ==========================================
-
-        if col == "Seller Group":
-
-            gb.configure_column(
-                col,
-                cellStyle=age_cell_style
-            )
-
-        # ==========================================
-        # LISTING GROUP COLOR
-        # ==========================================
-
-        if col == "Listing Group":
-
-            gb.configure_column(
-                col,
-                cellStyle=age_cell_style
-            )
-
-        # ==========================================
-        # ACTION COLOR
-        # ==========================================
-
-        if col == "Action":
-
-            gb.configure_column(
-                col,
-                cellStyle=action_cell_style,
-                width=240
             )
 
     # =====================================================
@@ -839,28 +704,6 @@ def render_asin_engine(final_df):
             "Count"
         ]
 
-        # =================================================
-        # PIE CHART
-        # =================================================
-
-        fig, ax = plt.subplots(figsize=(6, 6))
-
-        ax.pie(
-            competitor_summary["Count"],
-            labels=competitor_summary["Group"],
-            autopct='%1.1f%%'
-        )
-
-        ax.set_title(
-            "Competitor Distribution"
-        )
-
-        st.pyplot(fig)
-
-        # =================================================
-        # INSIGHT CARDS
-        # =================================================
-
         for _, row in competitor_summary.iterrows():
 
             group_name = row["Group"]
@@ -868,8 +711,6 @@ def render_asin_engine(final_df):
             count = row["Count"]
 
             strategy = build_strategy(group_name)
-
-            action = build_action_label(group_name)
 
             st.markdown(
                 f"""
@@ -902,21 +743,8 @@ def render_asin_engine(final_df):
                     font-size:14px;
                     color:#cbd5e1;
                     line-height:1.6;
-                    margin-bottom:12px;
                 ">
                     {strategy}
-                </div>
-
-                <div style="
-                    display:inline-block;
-                    padding:8px 12px;
-                    border-radius:8px;
-                    background:#1e293b;
-                    color:#f8fafc;
-                    font-size:13px;
-                    font-weight:700;
-                ">
-                    {action}
                 </div>
 
                 </div>
