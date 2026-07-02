@@ -304,3 +304,39 @@ elif engine=="Ranking Engine":
     else:
 
         st.info("Upload Ranking CSV.")
+
+# =========================================================
+# HTML EXPORT
+# =========================================================
+
+if (
+
+    st.session_state.get("asin_df") is not None
+    or st.session_state.get("keyword_df") is not None
+    or st.session_state.get("ranking_df") is not None
+
+):
+
+    html_report = generate_html_report(
+
+        st.session_state.get("asin_df"),
+
+        st.session_state.get("keyword_df"),
+
+        st.session_state.get("ranking_df"),
+
+    )
+
+    st.sidebar.markdown("---")
+
+    st.sidebar.download_button(
+
+        "Download HTML Report",
+
+        data=html_report,
+
+        file_name="amazon_dashboard.html",
+
+        mime="text/html"
+
+    )
