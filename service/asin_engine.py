@@ -104,7 +104,7 @@ def auto_fix_asin_headers(df):
 
 
 # =========================================================
-# SAFE NUMBER
+# CLEAN NUMERIC
 # =========================================================
 
 def clean_numeric(value):
@@ -112,11 +112,25 @@ def clean_numeric(value):
     if pd.isna(value):
         return 0
 
-    value = str(value)
+    value = str(value).strip()
 
-    value = value.replace(",", "")
+    # remove currency
     value = value.replace("$", "")
-    value = value.strip()
+
+    # remove spaces
+    value = value.replace(" ", "")
+
+    # =====================================================
+    # HANDLE BOTH 1,234 and 1.234
+    # =====================================================
+
+    if "," in value and "." in value:
+
+        value = value.replace(",", "")
+
+    elif "," in value:
+
+        value = value.replace(",", "")
 
     try:
         return float(value)
@@ -272,31 +286,25 @@ def build_strategy(group):
     strategies = {
 
         "Old Seller + Old Listing + High Sales":
-        "Strong established competitor with long-term market dominance. Avoid direct price competition.",
+        "Strong moat. Avoid direct competition.",
 
         "Old Seller + New Listing + High Sales":
-        "Large seller testing a new opportunity. Monitor product expansion closely.",
+        "Large seller testing new market.",
 
         "Mid Seller + Mid Listing + Stable Sales":
-        "Stable competitor with sustainable performance. Learn positioning and keyword strategy.",
+        "Stable seller. Learn and follow patterns.",
 
         "Mid Seller + Mid Listing + High Sales":
-        "Market still scalable. Strong opportunity for deeper product research.",
+        "Growing market opportunity. Research deeper.",
 
         "New Seller + New Listing + High Sales":
-        "Fast growth trend detected. Product-market fit appears strong.",
+        "Trending product with strong momentum.",
 
         "New Seller + Mid Listing + Low Sales":
-        "Weak market signal. Demand may already be declining.",
+        "Weak market signal. Avoid scaling.",
 
         "New Seller + New Listing + Stable Sales":
-        "Emerging seller with early traction. Worth monitoring.",
-
-        "Old Seller + Old Listing + Stable Sales":
-        "Mature listing with stable demand but slower growth.",
-
-        "Mid Seller + Old Listing + Stable Sales":
-        "Established mid-tier seller surviving on optimized positioning.",
+        "Emerging seller with potential.",
     }
 
     return strategies.get(
@@ -314,13 +322,13 @@ def build_action(group):
     actions = {
 
         "Old Seller + Old Listing + High Sales":
-        "Avoid Direct Competition",
+        "Avoid Competition",
 
         "Old Seller + New Listing + High Sales":
-        "Monitor Expansion",
+        "Monitor",
 
         "Mid Seller + Mid Listing + Stable Sales":
-        "Learn Pattern",
+        "Learn",
 
         "Mid Seller + Mid Listing + High Sales":
         "Deep Research",
@@ -329,16 +337,10 @@ def build_action(group):
         "Trend Opportunity",
 
         "New Seller + Mid Listing + Low Sales":
-        "Avoid Market",
+        "Avoid",
 
         "New Seller + New Listing + Stable Sales":
-        "Monitor Growth",
-
-        "Old Seller + Old Listing + Stable Sales":
-        "Stable Niche",
-
-        "Mid Seller + Old Listing + Stable Sales":
-        "Optimize Positioning",
+        "Follow",
     }
 
     return actions.get(
@@ -492,6 +494,7 @@ def render_asin_engine(final_df):
         final_df[revenue_col] = (
             final_df[revenue_col]
             .apply(clean_numeric)
+            .astype(float)
         )
 
     # =====================================================
@@ -542,17 +545,98 @@ def render_asin_engine(final_df):
             break
 
     # =====================================================
-    # HIDE IMAGE URL
+    # FILTERS
     # =====================================================
 
-    if (
-        "Image URL" in final_df.columns
-        and image_col != "Image URL"
-    ):
+    st.markdown("## Filters")
 
-        final_df = final_df.drop(
-            columns=["Image URL"]
+    f1, f2, f3, f4 = st.columns(4)
+
+    with f1:
+
+        seller_filter = st.multiselect(
+            "Seller Group",
+            options=sorted(
+                final_df["Seller Group"]
+                .dropna()
+                .unique()
+            )
+            if "Seller Group" in final_df.columns
+            else []
         )
+
+    with f2:
+
+        listing_filter = st.multiselect(
+            "Listing Group",
+            options=sorted(
+                final_df["Listing Group"]
+                .dropna()
+                .unique()
+            )
+            if "Listing Group" in final_df.columns
+            else []
+        )
+
+    with f3:
+
+        sales_filter = st.multiselect(
+            "Sales Group",
+            options=sorted(
+                final_df["Sales Group"]
+                .dropna()
+                .unique()
+            )
+            if "Sales Group" in final_df.columns
+            else []
+        )
+
+    with f4:
+
+        action_filter = st.multiselect(
+            "Action",
+            options=sorted(
+                final_df["Action"]
+                .dropna()
+                .unique()
+            )
+            if "Action" in final_df.columns
+            else []
+        )
+
+    # =====================================================
+    # FILTER DATA
+    # =====================================================
+
+    filtered_df = final_df.copy()
+
+    if seller_filter:
+
+        filtered_df = filtered_df[
+            filtered_df["Seller Group"]
+            .isin(seller_filter)
+        ]
+
+    if listing_filter:
+
+        filtered_df = filtered_df[
+            filtered_df["Listing Group"]
+            .isin(listing_filter)
+        ]
+
+    if sales_filter:
+
+        filtered_df = filtered_df[
+            filtered_df["Sales Group"]
+            .isin(sales_filter)
+        ]
+
+    if action_filter:
+
+        filtered_df = filtered_df[
+            filtered_df["Action"]
+            .isin(action_filter)
+        ]
 
     # =====================================================
     # SEARCH
@@ -562,8 +646,6 @@ def render_asin_engine(final_df):
         "Quick Search",
         placeholder="Search ASIN, keyword..."
     )
-
-    filtered_df = final_df.copy()
 
     if search_value:
 
@@ -705,29 +787,72 @@ def render_asin_engine(final_df):
 
         if (params.value.includes('New')) {
             return {
-                'backgroundColor': '#dcfce7',
-                'color': '#166534',
+                'backgroundColor': '#22c55e',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         if (params.value.includes('Mid')) {
             return {
-                'backgroundColor': '#dbeafe',
-                'color': '#1d4ed8',
+                'backgroundColor': '#3b82f6',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         if (params.value.includes('Old')) {
             return {
-                'backgroundColor': '#fee2e2',
-                'color': '#b91c1c',
+                'backgroundColor': '#ef4444',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         return {}
+    }
+    """)
+
+    # =====================================================
+    # SALES STYLE
+    # =====================================================
+
+    sales_style = JsCode("""
+    function(params) {
+
+        if (!params.value) {
+            return {}
+        }
+
+        if (params.value.includes('High')) {
+            return {
+                'backgroundColor': '#16a34a',
+                'color': 'white',
+                'fontWeight': '700'
+            }
+        }
+
+        if (params.value.includes('Stable')) {
+            return {
+                'backgroundColor': '#2563eb',
+                'color': 'white',
+                'fontWeight': '700'
+            }
+        }
+
+        if (params.value.includes('Low')) {
+            return {
+                'backgroundColor': '#f59e0b',
+                'color': 'white',
+                'fontWeight': '700'
+            }
+        }
+
+        return {
+            'backgroundColor': '#6b7280',
+            'color': 'white',
+            'fontWeight': '700'
+        }
     }
     """)
 
@@ -744,37 +869,41 @@ def render_asin_engine(final_df):
 
         if (params.value.includes('Avoid')) {
             return {
-                'backgroundColor': '#fee2e2',
-                'color': '#991b1b',
+                'backgroundColor': '#ef4444',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         if (params.value.includes('Monitor')) {
             return {
-                'backgroundColor': '#fef3c7',
-                'color': '#92400e',
+                'backgroundColor': '#f59e0b',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         if (params.value.includes('Learn')) {
             return {
-                'backgroundColor': '#dbeafe',
-                'color': '#1d4ed8',
+                'backgroundColor': '#3b82f6',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
         if (params.value.includes('Trend')) {
             return {
-                'backgroundColor': '#dcfce7',
-                'color': '#166534',
+                'backgroundColor': '#22c55e',
+                'color': 'white',
                 'fontWeight': '700'
             }
         }
 
-        return {}
+        return {
+            'backgroundColor': '#6b7280',
+            'color': 'white',
+            'fontWeight': '700'
+        }
     }
     """)
 
@@ -849,6 +978,17 @@ def render_asin_engine(final_df):
             gb.configure_column(
                 col,
                 cellStyle=group_style
+            )
+
+        # =================================================
+        # SALES COLOR
+        # =================================================
+
+        if col == "Sales Group":
+
+            gb.configure_column(
+                col,
+                cellStyle=sales_style
             )
 
         # =================================================
@@ -928,80 +1068,11 @@ def render_asin_engine(final_df):
         )
 
     # =====================================================
-    # CATEGORY SHARE
-    # =====================================================
-
-    possible_category_cols = [
-        "Category",
-        "Main Category",
-        "Product Category",
-    ]
-
-    category_col = None
-
-    for col in possible_category_cols:
-
-        if col in filtered_df.columns:
-
-            category_col = col
-            break
-
-    if category_col:
-
-        st.markdown(
-            "### Category Market Share"
-        )
-
-        selected_group = st.selectbox(
-            "Select Group Before Sales",
-            options=sorted(
-                filtered_df[
-                    "Group Before Sales"
-                ]
-                .dropna()
-                .unique()
-            )
-        )
-
-        category_df = filtered_df[
-            filtered_df["Group Before Sales"]
-            == selected_group
-        ]
-
-        category_summary = (
-            category_df[category_col]
-            .astype(str)
-            .value_counts(normalize=True)
-            .mul(100)
-            .round(1)
-            .reset_index()
-        )
-
-        category_summary.columns = [
-            "Category",
-            "Market Share %"
-        ]
-
-        st.dataframe(
-            category_summary,
-            use_container_width=True,
-            height=350
-        )
-
-        chart_data = category_summary.set_index(
-            "Category"
-        )
-
-        st.bar_chart(
-            chart_data["Market Share %"]
-        )
-
-    # =====================================================
-    # INSIGHT CARDS
+    # COMPETITOR SUMMARY
     # =====================================================
 
     competitor_summary = (
-        filtered_df["Competitor Group Before Sales"]
+        filtered_df["Group Before Sales"]
         .value_counts()
         .reset_index()
     )
@@ -1011,19 +1082,15 @@ def render_asin_engine(final_df):
         "Count"
     ]
 
+    # =====================================================
+    # INSIGHT CARDS
+    # =====================================================
+
     for _, row in competitor_summary.iterrows():
 
         group_name = row["Group"]
 
         count = row["Count"]
-
-        strategy = build_strategy(
-            group_name
-        )
-
-        action = build_action(
-            group_name
-        )
 
         st.markdown(
             f"""
@@ -1050,27 +1117,6 @@ def render_asin_engine(final_df):
                 margin-bottom:10px;
             ">
                 {count} ASINs detected
-            </div>
-
-            <div style="
-                font-size:14px;
-                color:#cbd5e1;
-                line-height:1.6;
-                margin-bottom:12px;
-            ">
-                {strategy}
-            </div>
-
-            <div style="
-                display:inline-block;
-                padding:8px 12px;
-                border-radius:8px;
-                background:#1e293b;
-                color:#f8fafc;
-                font-size:13px;
-                font-weight:700;
-            ">
-                {action}
             </div>
 
             </div>
