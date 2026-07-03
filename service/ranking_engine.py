@@ -163,56 +163,127 @@ def score_keyword(row):
         return 0
 
 
-# =========================================================
-# PRODUCT TYPE
-# =========================================================
+import re
 
-def detect_product_type(keyword):
+# =====================================================
+# KEYWORD CLUSTER
+# =====================================================
+
+def detect_cluster(keyword):
 
     keyword = str(keyword).lower()
 
-    product_map = {
+    keyword = re.sub(
+        r"[^a-z0-9 ]",
+        "",
+        keyword
+    )
 
-        "Blanket": [
-            "blanket"
+    cluster_rules = {
+
+        "Dog Collar":[
+            "dog collar",
+            "puppy collar",
+            "pet collar",
+            "martingale",
+            "leather collar",
         ],
 
-        "Mug": [
+        "Dog Leash":[
+            "dog leash",
+            "pet leash",
+            "retractable leash",
+        ],
+
+        "Dog DNA Testing":[
+            "dog dna",
+            "dna test",
+            "breed identification",
+            "dog breed",
+            "dna kit",
+        ],
+
+        "Pet Memorial":[
+            "pet memorial",
+            "dog memorial",
+            "cat memorial",
+            "pet loss",
+            "sympathy gift",
+        ],
+
+        "Pet Toys":[
+            "dog toy",
+            "cat toy",
+            "pet toy",
+            "chew toy",
+            "ball",
+        ],
+
+        "Pet Bed":[
+            "dog bed",
+            "cat bed",
+            "pet bed",
+        ],
+
+        "Pet Feeding":[
+            "dog bowl",
+            "cat bowl",
+            "pet feeder",
+            "food bowl",
+        ],
+
+        "Blanket":[
+            "blanket",
+            "throw blanket",
+            "weighted blanket",
+            "baby blanket",
+        ],
+
+        "Mug":[
             "mug",
+            "coffee mug",
             "cup",
         ],
 
-        "Shirt": [
-            "shirt",
-            "hoodie",
-            "sweatshirt",
-        ],
-
-        "Jewelry": [
+        "Jewelry":[
             "necklace",
             "bracelet",
             "ring",
+            "earring",
         ],
 
-        "Memorial": [
-            "memorial",
-            "sympathy",
-            "funeral",
+        "Shirt":[
+            "shirt",
+            "hoodie",
+            "sweatshirt",
+            "tshirt",
         ],
 
-        "Pet": [
-            "dog",
-            "cat",
-            "pet",
+        "Home Decor":[
+            "home decor",
+            "wall art",
+            "sign",
+            "canvas",
         ]
+
     }
 
-    for product, words in product_map.items():
+    for cluster, phrases in cluster_rules.items():
 
-        for word in words:
+        for phrase in phrases:
 
-            if word in keyword:
-                return product
+            if phrase in keyword:
+
+                return cluster
+
+    words = keyword.split()
+
+    if len(words) >= 2:
+
+        return " ".join(
+            word.capitalize()
+            for word in words[:2]
+        )
 
     return "General"
 
@@ -360,14 +431,14 @@ def render_ranking_engine(final_df):
 
     if "Keyword Phrase" in final_df.columns:
 
-        final_df["Product Type"] = (
+        final_df["Cluster"] = (
             final_df["Keyword Phrase"]
-            .apply(detect_product_type)
+            .apply(detect_cluster)
         )
 
     else:
 
-        final_df["Product Type"] = "General"
+        final_df["Cluster"] = "General"
 
     # =====================================================
     # OPPORTUNITY SCORE
@@ -435,10 +506,10 @@ def render_ranking_engine(final_df):
     with c2:
 
         product_filter = st.multiselect(
-            "Product Type",
+            "Cluster",
             options=sorted(
                 final_df[
-                    "Product Type"
+                    "Cluster"
                 ]
                 .dropna()
                 .unique()
@@ -486,7 +557,7 @@ def render_ranking_engine(final_df):
 
         filtered_df = filtered_df[
             filtered_df[
-                "Product Type"
+                "Cluster"
             ]
             .isin(product_filter)
         ]
@@ -770,7 +841,7 @@ def render_ranking_engine(final_df):
         .groupby(
             [
                 "Keyword Classification",
-                "Product Type",
+                "Cluster",
             ]
         )
         .agg({
@@ -787,7 +858,7 @@ def render_ranking_engine(final_df):
     insight_df.columns = [
 
         "Classification",
-        "Product Type",
+        "Cluster",
         "Keyword Count",
         "Avg Opportunity Score",
         "Avg Search Volume",
@@ -823,7 +894,7 @@ def render_ranking_engine(final_df):
             [
                 "Keyword Phrase",
                 "Keyword Classification",
-                "Product Type",
+                "Cluster",
                 "Search Volume",
                 "Cerebro IQ Score",
                 "H10 PPC Sugg. Bid",
