@@ -1,3 +1,4 @@
+import io
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -865,6 +866,103 @@ def render_asin_engine(final_df):
             "Action",
             cellStyle=action_color_js
         )
+
+# =====================================================
+# GRID TOOLBAR + EXPORT + COLUMN MENU
+# =====================================================
+
+gb.configure_side_bar(
+    filters_panel=True,
+    columns_panel=True,
+)
+
+gb.configure_grid_options(
+    enableRangeSelection=True,
+    enableCharts=True,
+    rowSelection="multiple",
+
+    # MENU 3 CHẤM
+    suppressMenuHide=False,
+
+    # SIDEBAR
+    sideBar={
+        "toolPanels": [
+            {
+                "id": "columns",
+                "labelDefault": "Columns",
+                "labelKey": "columns",
+                "iconKey": "columns",
+                "toolPanel": "agColumnsToolPanel",
+            },
+            {
+                "id": "filters",
+                "labelDefault": "Filters",
+                "labelKey": "filters",
+                "iconKey": "filter",
+                "toolPanel": "agFiltersToolPanel",
+            },
+        ],
+        "defaultToolPanel": "",
+    },
+
+    # STATUS BAR
+    statusBar={
+        "statusPanels": [
+            {
+                "statusPanel": "agTotalAndFilteredRowCountComponent",
+                "align": "left",
+            },
+            {
+                "statusPanel": "agAggregationComponent",
+                "align": "right",
+            },
+        ]
+    },
+
+    # AUTO SIZE
+    domLayout="normal",
+)
+
+# =====================================================
+# EXPORT BUTTONS
+# =====================================================
+
+c1, c2 = st.columns(2)
+
+with c1:
+
+    csv = filtered_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        "⬇ Export CSV",
+        csv,
+        "asin_dataset.csv",
+        "text/csv",
+        use_container_width=True,
+    )
+
+with c2:
+
+    excel_buffer = io.BytesIO()
+
+    with pd.ExcelWriter(
+        excel_buffer,
+        engine="openpyxl"
+    ) as writer:
+
+        filtered_df.to_excel(
+            writer,
+            index=False,
+            sheet_name="ASIN Dataset"
+        )
+
+    st.download_button(
+        "⬇ Export Excel",
+        excel_buffer.getvalue(),
+        "asin_dataset.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True,
+    )
 
     grid_options = gb.build()
 
