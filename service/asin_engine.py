@@ -256,10 +256,10 @@ def get_sales_group(sales):
     if sales == 0:
         return "No Sale"
 
-    elif sales < 500:
+    elif sales < 100:
         return "Low Sales"
 
-    elif sales <= 1000:
+    elif 100 <= sales <= 500:
         return "Stable Sales"
 
     return "High Sales"
