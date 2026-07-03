@@ -2,6 +2,7 @@
 # service/ranking_engine.py
 # =========================================================
 
+import re
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -163,110 +164,237 @@ def score_keyword(row):
         return 0
 
 
-import re
+# =========================================================
+# NORMALIZE KEYWORD
+# =========================================================
 
-# =====================================================
-# KEYWORD CLUSTER
-# =====================================================
-
-def detect_cluster(keyword):
+def normalize_keyword(keyword):
 
     keyword = str(keyword).lower()
 
     keyword = re.sub(
-        r"[^a-z0-9 ]",
-        "",
+        r"[^a-z0-9\s]",
+        " ",
         keyword
     )
 
+    keyword = re.sub(
+        r"\s+",
+        " ",
+        keyword
+    )
+
+    return keyword.strip()
+
+
+# =========================================================
+# KEYWORD CLUSTER ENGINE
+# =========================================================
+
+def detect_cluster(keyword):
+
+    keyword = normalize_keyword(keyword)
+
+    # =====================================================
+    # CLUSTER RULES
+    # =====================================================
+
     cluster_rules = {
 
-        "Dog Collar":[
+        # =================================================
+        # DOG COLLAR
+        # =================================================
+
+        "Dog Collar": [
+
             "dog collar",
             "puppy collar",
             "pet collar",
-            "martingale",
-            "leather collar",
+            "martingale collar",
+            "leather dog collar",
+            "personalized dog collar",
+            "gps dog collar",
+            "shock collar",
+
         ],
 
-        "Dog Leash":[
+        # =================================================
+        # DOG LEASH
+        # =================================================
+
+        "Dog Leash": [
+
             "dog leash",
             "pet leash",
             "retractable leash",
+            "puppy leash",
+            "training leash",
+
         ],
 
-        "Dog DNA Testing":[
+        # =================================================
+        # DOG DNA
+        # =================================================
+
+        "Dog DNA Testing": [
+
             "dog dna",
             "dna test",
+            "dog breed identification",
             "breed identification",
-            "dog breed",
+            "dog breed test",
             "dna kit",
+            "dog ancestry",
+
         ],
 
-        "Pet Memorial":[
+        # =================================================
+        # PET MEMORIAL
+        # =================================================
+
+        "Pet Memorial": [
+
             "pet memorial",
             "dog memorial",
             "cat memorial",
             "pet loss",
             "sympathy gift",
+            "rainbow bridge",
+
         ],
 
-        "Pet Toys":[
+        # =================================================
+        # PET TOY
+        # =================================================
+
+        "Pet Toys": [
+
             "dog toy",
             "cat toy",
             "pet toy",
             "chew toy",
-            "ball",
+            "squeaky toy",
+
         ],
 
-        "Pet Bed":[
+        # =================================================
+        # PET BED
+        # =================================================
+
+        "Pet Bed": [
+
             "dog bed",
             "cat bed",
             "pet bed",
+
         ],
 
-        "Pet Feeding":[
+        # =================================================
+        # PET FEEDING
+        # =================================================
+
+        "Pet Feeding": [
+
             "dog bowl",
             "cat bowl",
-            "pet feeder",
             "food bowl",
+            "pet feeder",
+            "slow feeder",
+
         ],
 
-        "Blanket":[
+        # =================================================
+        # BABY REGISTRY
+        # =================================================
+
+        "Baby Registry": [
+
+            "baby registry",
+            "baby shower registry",
+            "newborn registry",
+
+        ],
+
+        # =================================================
+        # GIFT CARD
+        # =================================================
+
+        "Gift Card": [
+
+            "gift card",
+            "amazon card",
+            "visa gift card",
+
+        ],
+
+        # =================================================
+        # BLANKET
+        # =================================================
+
+        "Blanket": [
+
             "blanket",
             "throw blanket",
             "weighted blanket",
             "baby blanket",
+
         ],
 
-        "Mug":[
+        # =================================================
+        # MUG
+        # =================================================
+
+        "Mug": [
+
             "mug",
             "coffee mug",
-            "cup",
+            "tea mug",
+
         ],
 
-        "Jewelry":[
-            "necklace",
-            "bracelet",
-            "ring",
-            "earring",
-        ],
+        # =================================================
+        # SHIRT
+        # =================================================
 
-        "Shirt":[
+        "Shirt": [
+
             "shirt",
             "hoodie",
             "sweatshirt",
             "tshirt",
+
         ],
 
-        "Home Decor":[
+        # =================================================
+        # JEWELRY
+        # =================================================
+
+        "Jewelry": [
+
+            "necklace",
+            "bracelet",
+            "ring",
+            "earring",
+
+        ],
+
+        # =================================================
+        # HOME DECOR
+        # =================================================
+
+        "Home Decor": [
+
             "home decor",
             "wall art",
-            "sign",
             "canvas",
-        ]
+            "wood sign",
 
+        ],
     }
+
+    # =====================================================
+    # MATCH
+    # =====================================================
 
     for cluster, phrases in cluster_rules.items():
 
@@ -276,7 +404,18 @@ def detect_cluster(keyword):
 
                 return cluster
 
+    # =====================================================
+    # SMART FALLBACK
+    # =====================================================
+
     words = keyword.split()
+
+    if len(words) >= 3:
+
+        return " ".join(
+            word.capitalize()
+            for word in words[:3]
+        )
 
     if len(words) >= 2:
 
@@ -326,28 +465,27 @@ def get_strategy(action):
 
         return (
             "High opportunity keyword. "
-            "Scale aggressively with PPC."
+            "Scale aggressively."
         )
 
     if action == "Launch":
 
         return (
             "Strong ranking potential. "
-            "Build organic ranking."
+            "Build ranking campaign."
         )
 
     if action == "Monitor":
 
         return (
-            "Trend signal detected. "
-            "Monitor keyword growth."
+            "Trend detected. "
+            "Monitor search growth."
         )
 
     if action == "Avoid":
 
         return (
-            "Competition too high. "
-            "Avoid direct targeting."
+            "Competition too high."
         )
 
     if action == "Research":
@@ -398,7 +536,7 @@ def render_ranking_engine(final_df):
     ]
 
     # =====================================================
-    # NUMERIC COLUMNS
+    # NUMERIC CLEAN
     # =====================================================
 
     numeric_cols = [
@@ -426,7 +564,7 @@ def render_ranking_engine(final_df):
             )
 
     # =====================================================
-    # PRODUCT TYPE
+    # CLUSTER
     # =====================================================
 
     if "Keyword Phrase" in final_df.columns:
@@ -441,7 +579,7 @@ def render_ranking_engine(final_df):
         final_df["Cluster"] = "General"
 
     # =====================================================
-    # OPPORTUNITY SCORE
+    # SCORE
     # =====================================================
 
     final_df["Opportunity Score"] = (
@@ -478,9 +616,7 @@ def render_ranking_engine(final_df):
     # =====================================================
 
     final_df["Strategy"] = (
-        final_df[
-            "Action"
-        ]
+        final_df["Action"]
         .apply(get_strategy)
     )
 
@@ -505,7 +641,7 @@ def render_ranking_engine(final_df):
 
     with c2:
 
-        product_filter = st.multiselect(
+        cluster_filter = st.multiselect(
             "Cluster",
             options=sorted(
                 final_df[
@@ -553,13 +689,13 @@ def render_ranking_engine(final_df):
             .isin(classification_filter)
         ]
 
-    if product_filter:
+    if cluster_filter:
 
         filtered_df = filtered_df[
             filtered_df[
                 "Cluster"
             ]
-            .isin(product_filter)
+            .isin(cluster_filter)
         ]
 
     if action_filter:
@@ -664,7 +800,7 @@ def render_ranking_engine(final_df):
         )
 
     # =====================================================
-    # FREEZE
+    # FREEZE KEYWORD
     # =====================================================
 
     if "Keyword Phrase" in filtered_df.columns:
@@ -677,7 +813,7 @@ def render_ranking_engine(final_df):
         )
 
     # =====================================================
-    # COLOR STYLE
+    # COLOR STYLES
     # =====================================================
 
     classification_style = JsCode("""
@@ -687,55 +823,43 @@ def render_ranking_engine(final_df):
             return {};
         }
 
-        if (
-            params.value == 'Easy Win'
-        ) {
-
+        if (params.value == 'Easy Win') {
             return {
                 backgroundColor: '#14532d',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'Build Rank'
-        ) {
-
+        if (params.value == 'Build Rank') {
             return {
                 backgroundColor: '#1d4ed8',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'Trending'
-        ) {
-
+        if (params.value == 'Trending') {
             return {
                 backgroundColor: '#7c3aed',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'High Competition'
-        ) {
-
+        if (params.value == 'High Competition') {
             return {
                 backgroundColor: '#7f1d1d',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
         return {
             backgroundColor: '#374151',
             color: 'white',
             fontWeight: '700'
-        }
+        };
     }
     """)
 
@@ -746,73 +870,61 @@ def render_ranking_engine(final_df):
             return {};
         }
 
-        if (
-            params.value == 'Scale'
-        ) {
-
+        if (params.value == 'Scale') {
             return {
                 backgroundColor: '#15803d',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'Launch'
-        ) {
-
+        if (params.value == 'Launch') {
             return {
                 backgroundColor: '#1d4ed8',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'Monitor'
-        ) {
-
+        if (params.value == 'Monitor') {
             return {
                 backgroundColor: '#7c3aed',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
-        if (
-            params.value == 'Avoid'
-        ) {
-
+        if (params.value == 'Avoid') {
             return {
                 backgroundColor: '#7f1d1d',
                 color: 'white',
                 fontWeight: '700'
-            }
+            };
         }
 
         return {
             backgroundColor: '#374151',
             color: 'white',
             fontWeight: '700'
-        }
+        };
     }
     """)
 
-    if "Keyword Classification" in filtered_df.columns:
+    gb.configure_column(
+        "Keyword Classification",
+        cellStyle=classification_style,
+        minWidth=190,
+    )
 
-        gb.configure_column(
-            "Keyword Classification",
-            cellStyle=classification_style,
-            minWidth=190,
-        )
+    gb.configure_column(
+        "Action",
+        cellStyle=action_style,
+        minWidth=140,
+    )
 
-    if "Action" in filtered_df.columns:
-
-        gb.configure_column(
-            "Action",
-            cellStyle=action_style,
-            minWidth=140,
-        )
+    # =====================================================
+    # GRID
+    # =====================================================
 
     grid_options = gb.build()
 
@@ -866,10 +978,15 @@ def render_ranking_engine(final_df):
 
     ]
 
+    insight_df = insight_df.sort_values(
+        by="Keyword Count",
+        ascending=False
+    )
+
     st.dataframe(
         insight_df,
         use_container_width=True,
-        height=320
+        height=420
     )
 
     # =====================================================
@@ -889,19 +1006,28 @@ def render_ranking_engine(final_df):
         .head(50)
     )
 
+    display_cols = [
+
+        "Keyword Phrase",
+        "Cluster",
+        "Keyword Classification",
+        "Search Volume",
+        "Cerebro IQ Score",
+        "H10 PPC Sugg. Bid",
+        "Competing Products",
+        "Opportunity Score",
+        "Action",
+
+    ]
+
+    display_cols = [
+        col for col in display_cols
+        if col in top_keywords.columns
+    ]
+
     st.dataframe(
         top_keywords[
-            [
-                "Keyword Phrase",
-                "Keyword Classification",
-                "Cluster",
-                "Search Volume",
-                "Cerebro IQ Score",
-                "H10 PPC Sugg. Bid",
-                "Competing Products",
-                "Opportunity Score",
-                "Action",
-            ]
+            display_cols
         ],
         use_container_width=True,
         height=420
