@@ -896,8 +896,31 @@ def render_asin_engine(final_df):
         .sort_values(ascending=False)
     )
 
-    st.bar_chart(
-        revenue_chart
+    import plotly.express as px
+
+    revenue_df = revenue_chart.reset_index()
+    revenue_df.columns = [
+        "Group Before Sales",
+        "Revenue"
+    ]
+    
+    fig = px.bar(
+        revenue_df,
+        x="Revenue",
+        y="Group Before Sales",
+        orientation="h"
+    )
+    
+    fig.update_layout(
+        height=450,
+        margin=dict(l=10, r=10, t=20, b=10),
+        yaxis_title="",
+        xaxis_title="Revenue"
+    )
+    
+    st.plotly_chart(
+        fig,
+        use_container_width=True
     )
 
     # =====================================================
@@ -966,10 +989,23 @@ def render_asin_engine(final_df):
                 height=320
             )
 
-            st.bar_chart(
-                category_share.set_index(
-                    "Category"
-                )
+            fig = px.bar(
+                category_share,
+                x="Market Share %",
+                y="Category",
+                orientation="h"
+            )
+            
+            fig.update_layout(
+                height=420,
+                margin=dict(l=10, r=10, t=20, b=10),
+                yaxis_title="",
+                xaxis_title="Market Share (%)"
+            )
+            
+            st.plotly_chart(
+                fig,
+                use_container_width=True
             )
 
     # =====================================================
