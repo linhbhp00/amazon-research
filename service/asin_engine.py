@@ -899,29 +899,20 @@ def render_asin_engine(final_df):
     import plotly.express as px
 
     revenue_df = revenue_chart.reset_index()
-    revenue_df.columns = [
-        "Group Before Sales",
-        "Revenue"
-    ]
+    revenue_df.columns = ["Group Before Sales", "Revenue"]
     
     fig = px.bar(
         revenue_df,
-        x="Revenue",
-        y="Group Before Sales",
-        orientation="h"
+        x="Group Before Sales",
+        y="Revenue"
     )
     
     fig.update_layout(
-        height=450,
-        margin=dict(l=10, r=10, t=20, b=10),
-        yaxis_title="",
-        xaxis_title="Revenue"
+        xaxis_tickangle=0,      # hoặc -20, -30
+        height=450
     )
     
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
     # CATEGORY MARKET SHARE
@@ -991,22 +982,16 @@ def render_asin_engine(final_df):
 
             fig = px.bar(
                 category_share,
-                x="Market Share %",
-                y="Category",
-                orientation="h"
+                x="Category",
+                y="Market Share %"
             )
             
             fig.update_layout(
-                height=420,
-                margin=dict(l=10, r=10, t=20, b=10),
-                yaxis_title="",
-                xaxis_title="Market Share (%)"
+                xaxis_tickangle=0,      # hoặc -20
+                height=450
             )
             
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+            st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
     # COMPETITOR OPPORTUNITY
