@@ -994,56 +994,183 @@ def render_asin_engine(final_df):
             st.plotly_chart(fig, use_container_width=True)
 
     # =====================================================
-    # COMPETITOR OPPORTUNITY
+    # COMPETITOR OPPORTUNITY INTELLIGENCE
     # =====================================================
-
+    
     st.markdown(
         "## Competitor Opportunity Intelligence"
     )
-
+    
     competitor_summary = (
         filtered_df
         .groupby("Group Before Sales")
         .agg({
-
+    
             "ASIN": "count",
             "_ASIN Revenue Numeric": "sum",
             "ASIN Sales": "sum",
-
+    
         })
         .reset_index()
     )
-
+    
     competitor_summary.columns = [
-
+    
         "Competitor Group",
         "Total ASINs",
         "Total Revenue",
         "Total Sales",
-
+    
     ]
-
+    
+    # =====================================================
+    # MARKET METRICS
+    # =====================================================
+    
+    market_revenue = competitor_summary[
+        "Total Revenue"
+    ].sum()
+    
+    market_sales = competitor_summary[
+        "Total Sales"
+    ].sum()
+    
+    competitor_summary["Revenue Share %"] = (
+        competitor_summary["Total Revenue"]
+        / market_revenue
+        * 100
+    ).round(1)
+    
+    competitor_summary["Sales Share %"] = (
+        competitor_summary["Total Sales"]
+        / market_sales
+        * 100
+    ).round(1)
+    
+    competitor_summary["Avg Revenue / ASIN"] = (
+        competitor_summary["Total Revenue"]
+        / competitor_summary["Total ASINs"]
+    ).round(2)
+    
+    competitor_summary["Avg Sales / ASIN"] = (
+        competitor_summary["Total Sales"]
+        / competitor_summary["Total ASINs"]
+    ).round(1)
+    
+    # =====================================================
+    # ACTION ENGINE
+    # =====================================================
+    
+    def generate_action(row):
+    
+        revenue = row["Revenue Share %"]
+        avg_sales = row["Avg Sales / ASIN"]
+        asins = row["Total ASINs"]
+    
+        if revenue >= 40:
+    
+            return "Avoid"
+    
+        elif revenue >= 25 and avg_sales >= 800:
+    
+            return "Research"
+    
+        elif asins >= 20 and revenue < 20:
+    
+            return "Opportunity"
+    
+        elif avg_sales < 300:
+    
+            return "Monitor"
+    
+        return "Analyze"
+    
+    # =====================================================
+    # STRATEGY ENGINE
+    # =====================================================
+    
+    def generate_strategy(row):
+    
+        action = row["Action"]
+    
+        if action == "Avoid":
+    
+            return (
+                "This competitor group dominates category revenue. "
+                "Compete only with strong product differentiation."
+            )
+    
+        elif action == "Research":
+    
+            return (
+                "Strong revenue and sales performance. "
+                "Analyze pricing, reviews and best-selling listings before entering."
+            )
+    
+        elif action == "Opportunity":
+    
+            return (
+                "Large number of competitors but low revenue concentration. "
+                "Potential market gap for differentiated products."
+            )
+    
+        elif action == "Monitor":
+    
+            return (
+                "Demand remains limited. "
+                "Monitor market trends before investing."
+            )
+    
+        return (
+            "Balanced competitor landscape. "
+            "Continue evaluating product positioning and customer demand."
+        )
+    
+    competitor_summary["Action"] = (
+        competitor_summary
+        .apply(generate_action, axis=1)
+    )
+    
+    competitor_summary["Strategy"] = (
+        competitor_summary
+        .apply(generate_strategy, axis=1)
+    )
+    
+    # =====================================================
+    # FORMAT
+    # =====================================================
+    
     competitor_summary["Total Revenue"] = (
         competitor_summary["Total Revenue"]
         .apply(format_us_currency)
     )
-
-    competitor_summary["Action"] = (
-        competitor_summary[
-            "Competitor Group"
-        ]
-        .apply(get_action)
+    
+    competitor_summary["Avg Revenue / ASIN"] = (
+        competitor_summary["Avg Revenue / ASIN"]
+        .apply(format_us_currency)
     )
-
-    competitor_summary["Strategy"] = (
-        competitor_summary[
-            "Action"
+    
+    competitor_summary = competitor_summary[
+    
+        [
+            "Competitor Group",
+            "Total ASINs",
+            "Total Revenue",
+            "Total Sales",
+            "Revenue Share %",
+            "Sales Share %",
+            "Avg Revenue / ASIN",
+            "Avg Sales / ASIN",
+            "Action",
+            "Strategy",
         ]
-        .apply(get_strategy)
-    )
-
+    
+    ]
+    
     st.dataframe(
+    
         competitor_summary,
         use_container_width=True,
-        height=420
+        height=420,
+    
     )
